@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.js",
     "dev": "netlify dev",
-    "test": "node test/test-function.mjs"
+    "test": "node test/test-function.mjs && node test/test-import-logic.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^11.0.2"

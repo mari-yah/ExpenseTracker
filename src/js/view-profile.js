@@ -2,6 +2,7 @@ import { escapeHtml } from './utils.js';
 import { randomHex, hashPassword } from './crypto.js';
 import { toast, confirmModal } from './ui.js';
 import * as State from './state.js';
+import { parseImportCsv, applyImport } from './import.js';
 
 export function renderProfile(main, ui, render, u) {
   var ud = State.currentUserData();
@@ -27,6 +28,13 @@ export function renderProfile(main, ui, render, u) {
     '<h3>Export your data</h3><div class="desc">Download everything in your ledger — accounts, categories and transactions.</div>' +
     '<div class="btn-row"><button type="button" class="btn secondary" id="exportJson">Export as JSON</button>' +
     '<button type="button" class="btn secondary" id="exportCsv">Export transactions as CSV</button></div>' +
+    '</div>' +
+
+    '<div class="panel-block card">' +
+    '<h3>Import transactions</h3><div class="desc">Bring in transactions from a CSV file — the same columns as "Export transactions as CSV" (Date, Type, Account, To Account, Category, Mode, Description, Amount). Accounts and categories that don\'t exist yet are created automatically; rows that match something already in your ledger are skipped so re-importing the same file is safe.</div>' +
+    (ui.importError ? '<div class="auth-error" style="margin-bottom:14px;">' + escapeHtml(ui.importError) + '</div>' : '') +
+    (ui.importPreview ? importPreviewHtml(ui.importPreview) :
+      '<input type="file" id="importFile" accept=".csv,text/csv" style="margin-top:4px;">') +
     '</div>' +
 
     '<div class="panel-block security-note">' +
@@ -63,6 +71,39 @@ export function renderProfile(main, ui, render, u) {
   document.getElementById('exportJson').addEventListener('click', function () { exportData('json', u, ud); });
   document.getElementById('exportCsv').addEventListener('click', function () { exportData('csv', u, ud); });
 
+  var importFile = document.getElementById('importFile');
+  if (importFile) {
+    importFile.addEventListener('change', function () {
+      var file = importFile.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        ui.importError = '';
+        var result = parseImportCsv(String(reader.result), ud);
+        if (result.error) { ui.importError = result.error; render(); return; }
+        ui.importPreview = result;
+        render();
+      };
+      reader.onerror = function () { ui.importError = 'Could not read that file.'; render(); };
+      reader.readAsText(file);
+    });
+  }
+
+  var importCancel = document.getElementById('importCancel');
+  if (importCancel) importCancel.addEventListener('click', function () { ui.importPreview = null; render(); });
+
+  var importConfirm = document.getElementById('importConfirm');
+  if (importConfirm) {
+    importConfirm.addEventListener('click', function () {
+      var preview = ui.importPreview;
+      var merged = applyImport(ud, preview);
+      State.commitUserData(u, merged, {
+        successMsg: 'Imported ' + preview.transactions.length + ' transaction' + (preview.transactions.length === 1 ? '' : 's') + '.',
+        onSuccess: function () { ui.importPreview = null; }
+      });
+    });
+  }
+
   document.getElementById('clearDataBtn').addEventListener('click', function () {
     confirmModal({
       title: 'Clear all your data?',
@@ -93,6 +134,27 @@ export function renderProfile(main, ui, render, u) {
       }
     });
   });
+}
+
+function importPreviewHtml(preview) {
+  var errorNote = preview.rowErrors.length
+    ? '<div class="alert-banner warn multiline" style="margin-top:12px;">' + preview.rowErrors.length + ' row' + (preview.rowErrors.length === 1 ? '' : 's') + " couldn't be read and " + (preview.rowErrors.length === 1 ? 'was' : 'were') + ' skipped:<br>' +
+      preview.rowErrors.slice(0, 8).map(function (e) { return escapeHtml(e); }).join('<br>') +
+      (preview.rowErrors.length > 8 ? '<br>…and ' + (preview.rowErrors.length - 8) + ' more.' : '') +
+      '</div>'
+    : '';
+  return '<div class="import-preview">' +
+    '<p>Read <strong>' + preview.totalRows + '</strong> row' + (preview.totalRows === 1 ? '' : 's') + ' — ' +
+    '<strong>' + preview.transactions.length + '</strong> ready to import' +
+    (preview.duplicates ? ', ' + preview.duplicates + ' skipped as already in your ledger' : '') + '.</p>' +
+    (preview.newAccounts.length ? '<p>New accounts to create: ' + preview.newAccounts.map(function (a) { return escapeHtml(a.name); }).join(', ') + '</p>' : '') +
+    (preview.newCategories.length ? '<p>New categories to create: ' + preview.newCategories.map(function (c) { return escapeHtml(c.name); }).join(', ') + '</p>' : '') +
+    errorNote +
+    '<div class="btn-row" style="margin-top:14px;">' +
+    '<button type="button" class="btn secondary" id="importCancel">Cancel</button>' +
+    '<button type="button" class="btn" id="importConfirm"' + (preview.transactions.length === 0 ? ' disabled' : '') + '>Import ' + preview.transactions.length + ' transaction' + (preview.transactions.length === 1 ? '' : 's') + '</button>' +
+    '</div>' +
+    '</div>';
 }
 
 function initialsOf(name) {

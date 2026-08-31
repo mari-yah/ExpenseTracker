@@ -194,6 +194,7 @@
   .alert-banner.ok{ background:var(--income-soft); color:var(--income); }
   .alert-banner.warn{ background:var(--warn-soft); color:var(--warn); }
   .alert-banner.over{ background:var(--expense-soft); color:var(--expense); }
+  .alert-banner.multiline{ display:block; line-height:1.6; }
 
   h2.section-title{ font-size:1rem; font-weight:700; margin:30px 0 14px; padding-bottom:0; }
   .section-title:first-of-type{ margin-top:0; }
@@ -257,5 +258,7 @@
   .divider{ border:none; border-top:1px solid var(--border); margin:26px 0; }
   .security-note{ display:flex; gap:10px; background:var(--surface-soft); border:1px solid var(--border-soft); border-radius:11px;
     padding:13px 15px; font-size:0.81rem; color:var(--ink-soft); line-height:1.5; }
+  .import-preview p{ font-size:0.85rem; margin:6px 0; color:var(--ink-soft); }
+  .import-preview p strong{ color:var(--ink); }
   .danger-zone{ border:1px solid var(--expense-soft); background:var(--expense-soft); border-radius:14px; padding:18px 20px; }
   .danger-zone h3{ color:var(--expense); }

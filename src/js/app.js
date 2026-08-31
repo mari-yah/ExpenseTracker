@@ -22,7 +22,9 @@ var ui = {
   txMonthFilter: 'all',
   txAccountFilter: 'all',
   profileError: '',
-  profileNotice: ''
+  profileNotice: '',
+  importPreview: null,
+  importError: ''
 };
 
 var root = document.getElementById('app');
