@@ -33,8 +33,7 @@ export function loadInitialState() {
 export function freshUserData() {
   return {
     accounts: [
-      { id: uid('acc'), name: 'Primary Account', opening: 0, createdAt: Date.now() },
-      { id: uid('acc'), name: 'Savings Account', opening: 0, createdAt: Date.now() }
+      { id: uid('acc'), name: 'Primary Account', opening: 0, createdAt: Date.now() }
     ],
     categories: DEFAULT_CATEGORIES.map(function (c) { return { id: uid('cat'), name: c.name, budget: c.budget }; }),
     transactions: []
@@ -50,9 +49,13 @@ export function currentUser() {
 
 export function currentUserData() {
   var u = currentUser();
-  if (!u) return null;
+  if (!u) return freshUserData();
   if (!state.data[u.id]) state.data[u.id] = freshUserData();
-  return state.data[u.id];
+  var ud = state.data[u.id];
+  if (!Array.isArray(ud.accounts)) ud.accounts = [];
+  if (!Array.isArray(ud.categories)) ud.categories = [];
+  if (!Array.isArray(ud.transactions)) ud.transactions = [];
+  return ud;
 }
 
 export function setSession(userId) {

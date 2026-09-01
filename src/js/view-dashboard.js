@@ -52,8 +52,7 @@ export function renderDashboard(main, ui, render, u) {
     '<div class="accounts-row">' + ud.accounts.map(function (a) {
       var bal = State.accountBalance(a, ud.transactions);
       return '<div class="account-card"><div class="name">' + escapeHtml(a.name) + '</div>' +
-        '<div class="bal num ' + (bal < 0 ? 'neg' : '') + '">' + inr(bal) + '</div>' +
-        '<div class="meta">Opening balance ' + inr(a.opening) + '</div></div>';
+        '<div class="bal num ' + (bal < 0 ? 'neg' : '') + '">' + inr(bal) + '</div></div>';
     }).join('') + '</div>' +
 
     '<div class="toolbar">' +
@@ -66,18 +65,21 @@ export function renderDashboard(main, ui, render, u) {
     '<div class="stat-row">' +
     '<div class="stat-card income"><div class="lbl">Income</div><div class="val num">' + inr(income) + '</div></div>' +
     '<div class="stat-card expense"><div class="lbl">Expense</div><div class="val num">' + inr(expense) + '</div></div>' +
-    '<div class="stat-card"><div class="lbl">Net</div><div class="val num">' + inr(net) + '</div></div>' +
+    '<div class="stat-card"><div class="lbl">Savings</div><div class="val num">' + inr(net) + '</div></div>' +
     '<div class="stat-card top"><div class="lbl">Top category</div><div class="val">' + escapeHtml(topCat) + '</div></div>' +
     '</div>' +
 
     '<h2 class="section-title">Budget tracker</h2>' +
-    '<div class="card">' + (budgetRows.length === 0 ? '<div class="empty-note">No categories yet — add one in the Categories tab.</div>' :
-      budgetRows.map(function (r) {
-        return '<div class="budget-row"><div><div class="cat-name">' + escapeHtml(r.name) + '</div>' +
-          '<div class="amounts num">' + inr(r.spent) + ' of ' + inr(r.budget) + '</div></div>' +
-          '<div class="bar-track"><div class="bar-fill ' + r.status + '" style="width:' + Math.min(r.pct * 100, 100) + '%"></div></div>' +
-          '<div class="status-pill ' + r.status + '">' + (r.status === 'over' ? 'Over budget' : r.status === 'warn' ? 'Warning' : 'On track') + '</div></div>';
-      }).join('')) + '</div>' +
+    (function() {
+      var activeBudgetRows = budgetRows.filter(function (r) { return r.spent > 0; });
+      return '<div class="card">' + (activeBudgetRows.length === 0 ? '<div class="empty-note">No expenses logged for any category in this period.</div>' :
+        activeBudgetRows.map(function (r) {
+          return '<div class="budget-row"><div><div class="cat-name">' + escapeHtml(r.name) + '</div>' +
+            '<div class="amounts num">' + inr(r.spent) + ' of ' + inr(r.budget) + '</div></div>' +
+            '<div class="bar-track"><div class="bar-fill ' + r.status + '" style="width:' + Math.min(r.pct * 100, 100) + '%"></div></div>' +
+            '<div class="status-pill ' + r.status + '">' + (r.status === 'over' ? 'Over budget' : r.status === 'warn' ? 'Warning' : 'On track') + '</div></div>';
+        }).join('')) + '</div>';
+    })() +
 
     '<h2 class="section-title">Spend by category</h2>' +
     '<div class="card">' + (chartCats.length === 0 ? '<div class="empty-note">No expenses logged for this view yet.</div>' :

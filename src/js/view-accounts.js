@@ -1,4 +1,4 @@
-import { escapeHtml, inr, uid } from './utils.js';
+import { escapeHtml, inr, uid, icon } from './utils.js';
 import { toast, confirmModal } from './ui.js';
 import * as State from './state.js';
 
@@ -12,17 +12,35 @@ export function renderAccounts(main, ui, render, u) {
     '<div class="field"><span class="field-label">Opening balance (₹)</span><input type="number" name="opening" step="0.01" placeholder="0" required></div>' +
     '<button type="submit" class="btn">Add account</button>' +
     '</form>' +
-    '<div class="card">' + (ud.accounts.length === 0 ? '<div class="empty-note">No accounts yet.</div>' :
-      '<div class="table-wrap"><table class="manage-table data-table"><thead><tr><th>Account</th><th>Opening balance</th><th>Current balance</th><th></th></tr></thead><tbody>' +
+    '<div>' + (ud.accounts.length === 0 ? '<div class="card"><div class="empty-note">No accounts yet.</div></div>' :
+      '<div class="acct-card-list">' +
       ud.accounts.map(function (a) {
         var bal = State.accountBalance(a, ud.transactions);
-        return '<tr data-id="' + a.id + '">' +
-          '<td><input type="text" class="acctNameInput" value="' + escapeHtml(a.name) + '"></td>' +
-          '<td class="num">₹ <input type="number" class="acctOpeningInput" step="0.01" value="' + a.opening + '" style="width:110px;"></td>' +
-          '<td class="amt num">' + inr(bal) + '</td>' +
-          '<td class="row-actions"><button type="button" class="del delAcct">Delete</button></td>' +
-          '</tr>';
-      }).join('') + '</tbody></table></div>') + '</div>'
+        var isEditing = ui.editingAccountId === a.id;
+        if (isEditing) {
+          return '<div class="acct-m-item editing" data-id="' + a.id + '">' +
+            '<form class="acctEditForm acct-edit-row">' +
+              '<div class="acct-m-name-wrap"><span class="acct-m-lbl">Account Name</span><input type="text" name="name" class="acctEditName" value="' + escapeHtml(a.name) + '" required></div>' +
+              '<div class="acct-m-op-wrap"><span class="acct-m-lbl">Opening Balance (₹)</span><input type="number" name="opening" step="0.01" class="acctEditOpening" value="' + a.opening + '" required></div>' +
+              '<div class="card-icon-actions">' +
+                '<button type="submit" class="icon-btn save-tick" title="Save account">' + icon('check') + '</button>' +
+                '<button type="button" class="icon-btn cancelAcctEdit" title="Cancel">' + icon('x') + '</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>';
+        }
+        return '<div class="acct-m-item" data-id="' + a.id + '">' +
+          '<div class="acct-m-main">' +
+            '<div class="acct-m-name-wrap"><span class="acct-m-lbl">Account</span><div class="acct-m-title">' + escapeHtml(a.name) + '</div></div>' +
+            '<div class="acct-m-bal-wrap"><span class="acct-m-lbl">Current balance</span><div class="acct-m-bal num">' + inr(bal) + '</div></div>' +
+            '<div class="acct-m-op-wrap"><span class="acct-m-lbl">Opening balance</span><div class="acct-m-val num">' + inr(a.opening) + '</div></div>' +
+          '</div>' +
+          '<div class="card-icon-actions">' +
+            '<button type="button" class="icon-btn editAcct" title="Edit account">' + icon('edit') + '</button>' +
+            '<button type="button" class="icon-btn del delAcct" title="Delete account">' + icon('trash') + '</button>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>') + '</div>'
   );
 
   document.getElementById('acctForm').addEventListener('submit', function (e) {
@@ -34,23 +52,39 @@ export function renderAccounts(main, ui, render, u) {
     State.commitUserData(u, Object.assign({}, ud, { accounts: ud.accounts.concat([newAcct]) }), { successMsg: 'Account added.' });
   });
 
-  main.querySelectorAll('.acctNameInput').forEach(function (inp) {
-    inp.addEventListener('change', function () {
-      var id = inp.closest('tr').dataset.id;
-      var newAccts = ud.accounts.map(function (a) { return a.id === id ? Object.assign({}, a, { name: inp.value.trim() || a.name }) : a; });
-      State.commitUserData(u, Object.assign({}, ud, { accounts: newAccts }), { successMsg: 'Account renamed.' });
+  main.querySelectorAll('.editAcct').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      ui.editingAccountId = btn.closest('[data-id]').dataset.id;
+      render();
     });
   });
-  main.querySelectorAll('.acctOpeningInput').forEach(function (inp) {
-    inp.addEventListener('change', function () {
-      var id = inp.closest('tr').dataset.id;
-      var newAccts = ud.accounts.map(function (a) { return a.id === id ? Object.assign({}, a, { opening: parseFloat(inp.value) || 0 }) : a; });
-      State.commitUserData(u, Object.assign({}, ud, { accounts: newAccts }), { successMsg: 'Opening balance updated.' });
+
+  main.querySelectorAll('.cancelAcctEdit').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      ui.editingAccountId = null;
+      render();
     });
   });
+
+  main.querySelectorAll('.acctEditForm').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var id = form.closest('[data-id]').dataset.id;
+      var fd = new FormData(form);
+      var newName = (fd.get('name') || '').trim();
+      var newOpening = parseFloat(fd.get('opening')) || 0;
+      if (!newName) return;
+      var newAccts = ud.accounts.map(function (a) { return a.id === id ? Object.assign({}, a, { name: newName, opening: newOpening }) : a; });
+      State.commitUserData(u, Object.assign({}, ud, { accounts: newAccts }), {
+        successMsg: 'Account updated.',
+        onSuccess: function () { ui.editingAccountId = null; }
+      });
+    });
+  });
+
   main.querySelectorAll('.delAcct').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var id = btn.closest('tr').dataset.id;
+      var id = btn.closest('[data-id]').dataset.id;
       var inUse = ud.transactions.some(function (t) { return t.accountId === id || t.fromAccountId === id || t.toAccountId === id; });
       if (inUse) { toast('This account has transactions linked to it — delete or reassign those first.'); return; }
       confirmModal({

@@ -1,4 +1,4 @@
-import { escapeHtml, inr, uid, todayStr, monthLabel, formatDate } from './utils.js';
+import { escapeHtml, inr, uid, todayStr, monthLabel, formatDate, icon } from './utils.js';
 import { MODES } from './constants.js';
 import { toast, confirmModal } from './ui.js';
 import * as State from './state.js';
@@ -38,8 +38,8 @@ export function renderTransactions(main, ui, render, u) {
       '<div class="field" id="toAcctField" hidden><span class="field-label">To account</span><select name="toAccountId">' + acctOpts(editingTx ? editingTx.toAccountId : null) + '</select></div>' +
       '<div class="field" id="catField"><span class="field-label">Category</span><select name="category">' + catOpts + '</select></div>' +
       '<div class="field"><span class="field-label">Mode</span><select name="mode">' + modeOpts + '</select></div>' +
-      '<div class="field span2"><span class="field-label">Description</span><input type="text" name="desc" placeholder="e.g. Big Bazaar groceries" value="' + (editingTx ? escapeHtml(editingTx.desc) : '') + '"></div>' +
       '<div class="field"><span class="field-label">Amount (₹)</span><input type="number" name="amount" min="0.01" step="0.01" required placeholder="0.00" value="' + (editingTx ? editingTx.amount : '') + '"></div>' +
+      '<div class="field full"><span class="field-label">Description</span><input type="text" name="desc" placeholder="e.g. Big Bazaar groceries" value="' + (editingTx ? escapeHtml(editingTx.desc) : '') + '"></div>' +
       '<div class="field full" style="display:flex; gap:10px;">' +
       '<button type="submit" class="btn">' + (editingTx ? 'Save changes' : 'Add transaction') + '</button>' +
       (editingTx ? '<button type="button" class="btn secondary" id="cancelEdit">Cancel</button>' : '') +
@@ -124,9 +124,9 @@ function renderTxTable(u, ud, ui, render) {
 
   if (list.length === 0) { card.innerHTML = '<div class="empty-note">No transactions for this view yet.</div>'; return; }
 
-  card.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' +
-    '<th>Date</th><th>Type</th><th>Account</th><th>Category</th><th>Mode</th><th>Description</th><th style="text-align:right;">Amount</th><th></th>' +
-    '</tr></thead><tbody>' +
+  card.innerHTML =
+    /* Desktop view: compact 1-line cards with edit/trash icons */
+    '<div class="tx-card-list desktop-only">' +
     list.map(function (t) {
       var acctLabel = t.type === 'Transfer'
         ? escapeHtml(State.accountName(ud.accounts, t.fromAccountId)) + ' → ' + escapeHtml(State.accountName(ud.accounts, t.toAccountId))
@@ -134,28 +134,65 @@ function renderTxTable(u, ud, ui, render) {
       var amtClass = t.type === 'Income' ? 'income' : (t.type === 'Expense' ? 'expense' : '');
       var sign = t.type === 'Income' ? '+' : (t.type === 'Expense' ? '−' : '');
       var badgeClass = t.type === 'Income' ? 'income' : (t.type === 'Expense' ? 'expense' : 'transfer');
-      return '<tr data-id="' + t.id + '">' +
-        '<td>' + formatDate(t.date) + '</td>' +
-        '<td><span class="badge ' + badgeClass + '">' + t.type + '</span></td>' +
-        '<td>' + acctLabel + '</td>' +
-        '<td>' + escapeHtml(t.category || '—') + '</td>' +
-        '<td><span class="mode-tag">' + escapeHtml(t.mode) + '</span></td>' +
-        '<td>' + escapeHtml(t.desc || '—') + '</td>' +
-        '<td class="amt num ' + amtClass + '">' + sign + ' ' + inr(t.amount) + '</td>' +
-        '<td class="row-actions"><button type="button" class="editTx">Edit</button><button type="button" class="del delTx">Delete</button></td>' +
-        '</tr>';
-    }).join('') + '</tbody></table></div>';
+      return '<div class="tx-d-item" data-id="' + t.id + '">' +
+        '<div class="tx-d-main">' +
+          '<span class="tx-d-date">' + formatDate(t.date) + '</span>' +
+          '<span class="tx-d-desc">' + escapeHtml(t.desc || (t.type + ' transaction')) + '</span>' +
+          '<div class="tx-d-badges">' +
+            '<span class="badge ' + badgeClass + '">' + t.type + '</span>' +
+            (t.category ? '<span class="mode-tag">' + escapeHtml(t.category) + '</span>' : '') +
+            (t.mode ? '<span class="mode-tag">' + escapeHtml(t.mode) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="tx-d-side">' +
+          '<span class="tx-d-acct">' + acctLabel + '</span>' +
+          '<span class="tx-d-amt num ' + amtClass + '">' + sign + ' ' + inr(t.amount) + '</span>' +
+          '<div class="tx-icon-actions">' +
+            '<button type="button" class="icon-btn editTx" title="Edit">' + icon('edit') + '</button>' +
+            '<button type="button" class="icon-btn del delTx" title="Delete">' + icon('trash') + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>' +
+
+    /* Mobile view: Untouched mobile banking transaction cards */
+    '<div class="mobile-tx-list mobile-only">' +
+    list.map(function (t) {
+      var acctLabel = t.type === 'Transfer'
+        ? escapeHtml(State.accountName(ud.accounts, t.fromAccountId)) + ' → ' + escapeHtml(State.accountName(ud.accounts, t.toAccountId))
+        : escapeHtml(State.accountName(ud.accounts, t.accountId));
+      var amtClass = t.type === 'Income' ? 'income' : (t.type === 'Expense' ? 'expense' : '');
+      var sign = t.type === 'Income' ? '+' : (t.type === 'Expense' ? '−' : '');
+      var badgeClass = t.type === 'Income' ? 'income' : (t.type === 'Expense' ? 'expense' : 'transfer');
+      return '<div class="tx-m-item" data-id="' + t.id + '">' +
+        '<div class="tx-m-head">' +
+          '<div class="tx-m-date">' + formatDate(t.date) + '</div>' +
+          '<div class="tx-m-amt num ' + amtClass + '">' + sign + ' ' + inr(t.amount) + '</div>' +
+        '</div>' +
+        '<div class="tx-m-desc">' + escapeHtml(t.desc || (t.type + ' transaction')) + '</div>' +
+        '<div class="tx-m-meta">' +
+          '<span class="badge ' + badgeClass + '">' + t.type + '</span>' +
+          (t.category ? '<span class="mode-tag">' + escapeHtml(t.category) + '</span>' : '') +
+          (t.mode ? '<span class="mode-tag">' + escapeHtml(t.mode) + '</span>' : '') +
+          '<span class="tx-m-acct">' + acctLabel + '</span>' +
+        '</div>' +
+        '<div class="tx-m-actions">' +
+          '<button type="button" class="editTx">Edit</button>' +
+          '<button type="button" class="del delTx">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
 
   card.querySelectorAll('.editTx').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      ui.editingTxId = btn.closest('tr').dataset.id;
+      ui.editingTxId = btn.closest('[data-id]').dataset.id;
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   });
   card.querySelectorAll('.delTx').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var id = btn.closest('tr').dataset.id;
+      var id = btn.closest('[data-id]').dataset.id;
       confirmModal({
         title: 'Delete this transaction?',
         body: 'This entry will be permanently removed and account balances will be recalculated.',

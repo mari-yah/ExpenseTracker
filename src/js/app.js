@@ -36,8 +36,10 @@ function render() {
 }
 
 function themeToggleHtml() {
-  return '<button type="button" class="theme-toggle themeToggleBtn" aria-label="Toggle dark mode" title="Toggle dark mode">' +
-    icon(Theme.isDarkActive() ? 'sun' : 'moon') + '</button>';
+  var isDark = Theme.isDarkActive();
+  return '<button type="button" class="theme-toggle-icon themeToggleBtn" aria-label="Toggle theme" title="Toggle dark/light mode">' +
+    icon(isDark ? 'sun' : 'moon') +
+    '</button>';
 }
 
 function wireThemeToggles() {
@@ -64,10 +66,12 @@ function renderShell(u) {
         icon(n.icon) + '<span class="lbl">' + n.label + '</span></button>';
     }).join('') +
     '<div class="sidebar-foot">' +
+    '<div class="sidebar-foot-row-single">' +
     '<button type="button" class="user-chip gotoProfile"><span class="avatar">' + initials(u.username) + '</span><span class="uname">' + escapeHtml(u.username) + '</span></button>' +
-    '<div class="sidebar-foot-row">' +
+    '<div class="sidebar-foot-actions">' +
     themeToggleHtml() +
-    '<button type="button" class="logout-btn logoutBtn">' + icon('logout') + ' <span class="lbl">Log out</span></button>' +
+    '<button type="button" class="logout-btn logoutBtn" title="Log out">' + icon('logout') + '</button>' +
+    '</div>' +
     '</div>' +
     '</div>' +
     '</div>' +
@@ -76,7 +80,7 @@ function renderShell(u) {
     '<div class="right">' +
     themeToggleHtml() +
     '<button type="button" class="user-chip gotoProfile"><span class="avatar">' + initials(u.username) + '</span><span class="uname">' + escapeHtml(u.username) + '</span></button>' +
-    '<button type="button" class="logout-btn logoutBtn">' + icon('logout') + '</button>' +
+    '<button type="button" class="logout-btn logoutBtn" title="Log out">' + icon('logout') + '</button>' +
     '</div>' +
     '</div>' +
     '<div class="main" id="mainArea"></div>' +

@@ -13,59 +13,36 @@ export function renderProfile(main, ui, render, u) {
     '<div><div class="uname">' + escapeHtml(u.username) + '</div><div class="since">Member since ' + since + '</div></div></div>' +
 
     '<div class="panel-block card">' +
-    '<h3>Change password</h3><div class="desc">Update the password used to log in to this account.</div>' +
-    (ui.profileError ? '<div class="auth-error" style="margin-bottom:14px;">' + escapeHtml(ui.profileError) + '</div>' : '') +
-    (ui.profileNotice ? '<div class="alert-banner ok" style="margin-bottom:14px;">' + escapeHtml(ui.profileNotice) + '</div>' : '') +
-    '<form id="pwForm" class="grid-form">' +
-    '<div class="field span2"><span class="field-label">Current password</span><input type="password" name="current" autocomplete="current-password" required></div>' +
-    '<div class="field span2"><span class="field-label">New password</span><input type="password" name="next" autocomplete="new-password" required minlength="6"></div>' +
-    '<div class="field span2"><span class="field-label">Confirm new password</span><input type="password" name="confirm" autocomplete="new-password" required minlength="6"></div>' +
-    '<div class="field full"><button type="submit" class="btn">Update password</button></div>' +
-    '</form>' +
+    '<h3>Account & Data Export</h3>' +
+    '<div class="btn-row" style="margin-top:12px;">' +
+    '<button type="button" class="btn" id="openPwModalBtn">Change Password</button>' +
+    '<button type="button" class="btn secondary" id="exportJson">Export JSON</button>' +
+    '<button type="button" class="btn secondary" id="exportCsv">Export CSV</button>' +
+    '</div>' +
     '</div>' +
 
     '<div class="panel-block card">' +
-    '<h3>Export your data</h3><div class="desc">Download everything in your ledger — accounts, categories and transactions.</div>' +
-    '<div class="btn-row"><button type="button" class="btn secondary" id="exportJson">Export as JSON</button>' +
-    '<button type="button" class="btn secondary" id="exportCsv">Export transactions as CSV</button></div>' +
-    '</div>' +
-
-    '<div class="panel-block card">' +
-    '<h3>Import transactions</h3><div class="desc">Bring in transactions from a CSV file — the same columns as "Export transactions as CSV" (Date, Type, Account, To Account, Category, Mode, Description, Amount). Accounts and categories that don\'t exist yet are created automatically; rows that match something already in your ledger are skipped so re-importing the same file is safe.</div>' +
+    '<h3>Import transactions</h3><div class="desc desktop-only">Bring in transactions from a CSV file. Accounts and categories are created automatically; duplicates are skipped safely.</div>' +
     (ui.importError ? '<div class="auth-error" style="margin-bottom:14px;">' + escapeHtml(ui.importError) + '</div>' : '') +
     (ui.importPreview ? importPreviewHtml(ui.importPreview) :
-      '<input type="file" id="importFile" accept=".csv,text/csv" style="margin-top:4px;">') +
+      '<input type="file" id="importFile" accept=".csv,text/csv" style="margin-top:8px;">') +
     '</div>' +
 
-    '<div class="panel-block security-note">' +
-    'This login is a personal privacy layer for a shared page, not bank-grade security — there’s no server behind it. Anyone with edit access to this page could technically inspect the stored data. Don’t reuse a sensitive password here.' +
+    '<div class="panel-block security-note desktop-only">' +
+    'This login is a personal privacy layer for a shared page — there is no server behind it. Don’t reuse a sensitive password here.' +
     '</div>' +
 
     '<div class="panel-block danger-zone">' +
-    '<h3>Clear all my data</h3><p style="color:var(--ink-soft); font-size:0.85rem; margin:6px 0 14px;">Permanently deletes every transaction, account and category on this login. You’ll stay logged in with a clean slate. This cannot be undone.</p>' +
+    '<h3>Danger zone</h3>' +
+    '<div class="btn-row" style="margin-top:12px;">' +
     '<button type="button" class="btn danger" id="clearDataBtn">Clear all my data</button>' +
-    '<hr class="divider">' +
-    '<h3>Delete my account</h3><p style="color:var(--ink-soft); font-size:0.85rem; margin:6px 0 14px;">Permanently deletes your login and everything in it. This cannot be undone.</p>' +
     '<button type="button" class="btn danger" id="deleteAcctBtn">Delete my account</button>' +
+    '</div>' +
     '</div>'
   );
 
-  document.getElementById('pwForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    ui.profileError = ''; ui.profileNotice = '';
-    var fd = new FormData(e.target);
-    var current = fd.get('current'), next = fd.get('next'), confirm = fd.get('confirm');
-    hashPassword(current, u.salt).then(function (hash) {
-      if (hash !== u.passwordHash) { ui.profileError = 'Current password is incorrect.'; render(); return; }
-      if (next.length < 6) { ui.profileError = 'New password must be at least 6 characters.'; render(); return; }
-      if (next !== confirm) { ui.profileError = 'New passwords do not match.'; render(); return; }
-      var newSalt = randomHex(16);
-      hashPassword(next, newSalt).then(function (newHash) {
-        var newUsers = State.state.users.map(function (usr) { return usr.id === u.id ? Object.assign({}, usr, { passwordHash: newHash, salt: newSalt }) : usr; });
-        var newState = Object.assign({}, State.state, { users: newUsers });
-        State.saveState(newState, { successMsg: 'Password updated.', onSuccess: function () { ui.profileNotice = 'Password updated.'; } });
-      });
-    });
+  document.getElementById('openPwModalBtn').addEventListener('click', function () {
+    openPasswordModal(u);
   });
 
   document.getElementById('exportJson').addEventListener('click', function () { exportData('json', u, ud); });
@@ -197,4 +174,52 @@ function exportData(kind, u, ud) {
 function handleDownloadError(err) {
   if (err && err.code === 'declined') return;
   toast('Could not prepare that download.');
+}
+
+function openPasswordModal(u) {
+  var root = document.getElementById('modal-root');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-overlay">' +
+    '<div class="modal">' +
+    '<h3>Change Password</h3>' +
+    '<div id="modalErr" class="auth-error" style="margin-bottom:12px;" hidden></div>' +
+    '<form id="pwModalForm" style="display:flex; flex-direction:column; gap:12px;">' +
+    '<div class="field"><span class="field-label">Current password</span><input type="password" name="current" required></div>' +
+    '<div class="field"><span class="field-label">New password</span><input type="password" name="next" required minlength="6"></div>' +
+    '<div class="field"><span class="field-label">Confirm new password</span><input type="password" name="confirm" required minlength="6"></div>' +
+    '<div class="actions">' +
+    '<button type="button" class="btn secondary" id="closePwModal">Cancel</button>' +
+    '<button type="submit" class="btn">Update Password</button>' +
+    '</div>' +
+    '</form>' +
+    '</div>' +
+    '</div>';
+
+  function close() { root.innerHTML = ''; }
+  document.getElementById('closePwModal').addEventListener('click', close);
+
+  document.getElementById('pwModalForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var errEl = document.getElementById('modalErr');
+    errEl.hidden = true;
+    var fd = new FormData(e.target);
+    var current = fd.get('current'), next = fd.get('next'), confirm = fd.get('confirm');
+
+    hashPassword(current, u.salt).then(function (hash) {
+      if (hash !== u.passwordHash) { errEl.textContent = 'Current password is incorrect.'; errEl.hidden = false; return; }
+      if (next.length < 6) { errEl.textContent = 'New password must be at least 6 characters.'; errEl.hidden = false; return; }
+      if (next !== confirm) { errEl.textContent = 'New passwords do not match.'; errEl.hidden = false; return; }
+
+      var newSalt = randomHex(16);
+      hashPassword(next, newSalt).then(function (newHash) {
+        var newUsers = State.state.users.map(function (usr) { return usr.id === u.id ? Object.assign({}, usr, { passwordHash: newHash, salt: newSalt }) : usr; });
+        var newState = Object.assign({}, State.state, { users: newUsers });
+        State.saveState(newState, {
+          successMsg: 'Password updated.',
+          onSuccess: function () { close(); }
+        });
+      });
+    });
+  });
 }
