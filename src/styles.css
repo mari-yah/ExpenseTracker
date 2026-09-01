@@ -231,10 +231,12 @@
   .bar-fill.ok{ background:var(--income); }
   .bar-fill.warn{ background:var(--warn); }
   .bar-fill.over{ background:var(--ink); }
+  .bar-fill.unbudgeted{ background:var(--ink-faint); }
   .status-pill{ font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; padding:4px 10px; border-radius:99px; white-space:nowrap; }
   .status-pill.ok{ background:var(--income-soft); color:var(--income); }
   .status-pill.warn{ background:var(--warn-soft); color:var(--warn); }
   .status-pill.over{ background:var(--surface-soft); color:var(--ink); border:1px solid var(--border); }
+  .status-pill.unbudgeted{ background:var(--surface-soft); color:var(--ink-soft); border:1px solid var(--border-soft); }
 
   .chart-bars{ display:flex; flex-direction:column; gap:11px; }
   .chart-row{ display:grid; grid-template-columns:130px 1fr 92px; align-items:center; gap:12px; }

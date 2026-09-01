@@ -58,6 +58,14 @@ export function currentUserData() {
   return ud;
 }
 
+export function categoryBudget(cat, monthKey) {
+  if (!cat) return 0;
+  if (cat.monthlyBudgets && monthKey && cat.monthlyBudgets[monthKey] !== undefined) {
+    return Number(cat.monthlyBudgets[monthKey]) || 0;
+  }
+  return Number(cat.budget) || 0;
+}
+
 export function setSession(userId) {
   try {
     if (userId) localStorage.setItem(SESSION_KEY, userId);

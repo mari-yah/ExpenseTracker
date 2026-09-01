@@ -31,11 +31,12 @@ export function renderDashboard(main, ui, render, u) {
   var overCount = 0, warnCount = 0;
   var budgetRows = ud.categories.map(function (c) {
     var spent = spendByCat[c.name] || 0;
-    var budget = Number(c.budget) || 0;
+    var budget = State.categoryBudget(c, ui.dashMonth);
     var pct = budget > 0 ? spent / budget : 0;
     var status = 'ok';
-    if (budget > 0 && pct >= 1) { status = 'over'; overCount++; }
-    else if (budget > 0 && pct >= 0.8) { status = 'warn'; warnCount++; }
+    if (budget === 0) { status = 'unbudgeted'; }
+    else if (spent > budget) { status = 'over'; overCount++; }
+    else if (pct >= 0.85) { status = 'warn'; warnCount++; }
     return { name: c.name, budget: budget, spent: spent, pct: pct, status: status };
   });
 
@@ -77,7 +78,7 @@ export function renderDashboard(main, ui, render, u) {
           return '<div class="budget-row"><div><div class="cat-name">' + escapeHtml(r.name) + '</div>' +
             '<div class="amounts num">' + inr(r.spent) + ' of ' + inr(r.budget) + '</div></div>' +
             '<div class="bar-track"><div class="bar-fill ' + r.status + '" style="width:' + Math.min(r.pct * 100, 100) + '%"></div></div>' +
-            '<div class="status-pill ' + r.status + '">' + (r.status === 'over' ? 'Over budget' : r.status === 'warn' ? 'Warning' : 'On track') + '</div></div>';
+            '<div class="status-pill ' + r.status + '">' + (r.status === 'unbudgeted' ? 'Unbudgeted' : (r.status === 'over' ? 'Over budget' : r.status === 'warn' ? 'Warning' : 'On track')) + '</div></div>';
         }).join('')) + '</div>';
     })() +
 

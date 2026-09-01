@@ -34,7 +34,12 @@
         {
           "id": "cat_mthh74f578mei9",
           "name": "Groceries",
-          "budget": 500
+          "budget": 500,
+          "monthlyBudgets": {
+            "2026-06": 1000,
+            "2026-09": 500,
+            "2026-05": 100
+          }
         },
         {
           "id": "cat_mthh74f54e90oy",
