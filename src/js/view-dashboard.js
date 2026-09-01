@@ -47,6 +47,10 @@ export function renderDashboard(main, ui, render, u) {
   var chartCats = Object.keys(spendByCat).map(function (k) { return [k, spendByCat[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
   var maxSpend = chartCats.length ? chartCats[0][1] : 0;
 
+  var totalBudget = ud.categories.reduce(function (sum, c) {
+    return sum + State.categoryBudget(c, ui.dashMonth);
+  }, 0);
+
   main.insertAdjacentHTML('beforeend',
     '<div class="page-head"><div><h1>Dashboard</h1><div class="sub">Where your money stands, this month.</div></div></div>' +
 
@@ -65,9 +69,9 @@ export function renderDashboard(main, ui, render, u) {
 
     '<div class="stat-row">' +
     '<div class="stat-card income"><div class="lbl">Income</div><div class="val num">' + inr(income) + '</div></div>' +
+    '<div class="stat-card"><div class="lbl">Budget</div><div class="val num">' + inr(totalBudget) + '</div></div>' +
     '<div class="stat-card expense"><div class="lbl">Expense</div><div class="val num">' + inr(expense) + '</div></div>' +
     '<div class="stat-card"><div class="lbl">Savings</div><div class="val num">' + inr(net) + '</div></div>' +
-    '<div class="stat-card top"><div class="lbl">Top category</div><div class="val">' + escapeHtml(topCat) + '</div></div>' +
     '</div>' +
 
     '<h2 class="section-title">Budget tracker</h2>' +
