@@ -152,10 +152,12 @@ function exportData(kind, u, ud) {
     } else {
       var rows = [['Date', 'Type', 'Account', 'To Account', 'Category', 'Mode', 'Description', 'Amount']];
       ud.transactions.slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).forEach(function (t) {
+        var isDual = t.type === 'Transfer' || t.type === 'CC Bill Payment';
+        var effAcctId = State.effectiveTxAccountId(t, ud.accounts);
         rows.push([
           t.date, t.type,
-          t.type === 'Transfer' ? State.accountName(ud.accounts, t.fromAccountId) : State.accountName(ud.accounts, t.accountId),
-          t.type === 'Transfer' ? State.accountName(ud.accounts, t.toAccountId) : '',
+          isDual ? State.accountName(ud.accounts, t.fromAccountId) : State.accountName(ud.accounts, effAcctId),
+          isDual ? State.accountName(ud.accounts, t.toAccountId) : '',
           t.category || '', t.mode || '', t.desc || '', t.amount
         ]);
       });

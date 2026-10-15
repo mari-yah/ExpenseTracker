@@ -13,7 +13,8 @@ export function renderDashboard(main, ui, render, u) {
 
   var monthTx = ud.transactions.filter(function (t) { return t.date.slice(0, 7) === ui.dashMonth; });
   var scopedTx = ui.dashAccount === 'all' ? monthTx : monthTx.filter(function (t) {
-    return t.accountId === ui.dashAccount || t.fromAccountId === ui.dashAccount || t.toAccountId === ui.dashAccount;
+    var effId = State.effectiveTxAccountId(t, ud.accounts);
+    return effId === ui.dashAccount || t.accountId === ui.dashAccount || t.fromAccountId === ui.dashAccount || t.toAccountId === ui.dashAccount;
   });
 
   var income = scopedTx.filter(function (t) { return t.type === 'Income'; }).reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
@@ -55,8 +56,10 @@ export function renderDashboard(main, ui, render, u) {
     '<div class="page-head"><div><h1>Dashboard</h1><div class="sub">Where your money stands, this month.</div></div></div>' +
 
     '<div class="accounts-row">' + ud.accounts.map(function (a) {
-      var bal = State.accountBalance(a, ud.transactions);
-      return '<div class="account-card"><div class="name">' + escapeHtml(a.name) + '</div>' +
+      var accType = State.getAccountType(a);
+      var bal = State.accountBalance(a, ud.transactions, ud.accounts);
+      var typeBadge = accType === 'Credit Card' ? ' (CC Due)' : (accType === 'Cash' ? ' (Cash)' : '');
+      return '<div class="account-card"><div class="name">' + escapeHtml(a.name + typeBadge) + '</div>' +
         '<div class="bal num ' + (bal < 0 ? 'neg' : '') + '">' + inr(bal) + '</div></div>';
     }).join('') + '</div>' +
 

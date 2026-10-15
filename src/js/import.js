@@ -22,7 +22,8 @@ function normalizeType(s) {
   var v = (s || '').trim().toLowerCase();
   if (v === 'income') return 'Income';
   if (v === 'expense') return 'Expense';
-  if (v === 'transfer') return 'Transfer';
+  if (v === 'transfer' || v === 'transfer / cash withdrawal') return 'Transfer';
+  if (v === 'cc bill payment' || v === 'credit card payment') return 'CC Bill Payment';
   return null;
 }
 
@@ -112,11 +113,11 @@ export function parseImportCsv(text, ud) {
       category: '', mode: get('mode') || 'Other', desc: get('description'), amount: amount
     };
 
-    if (type === 'Transfer') {
+    if (type === 'Transfer' || type === 'CC Bill Payment') {
       var from = resolveAccount(get('account'));
       var to = resolveAccount(get('toAccount'));
-      if (!from || !to) { rowErrors.push('Row ' + (r + 1) + ': a Transfer needs both Account and To Account.'); continue; }
-      if (from.id === to.id) { rowErrors.push('Row ' + (r + 1) + ': Transfer needs two different accounts.'); continue; }
+      if (!from || !to) { rowErrors.push('Row ' + (r + 1) + ': a ' + type + ' needs both Account and To Account.'); continue; }
+      if (from.id === to.id) { rowErrors.push('Row ' + (r + 1) + ': ' + type + ' needs two different accounts.'); continue; }
       record.fromAccountId = from.id;
       record.toAccountId = to.id;
     } else {

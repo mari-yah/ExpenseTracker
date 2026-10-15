@@ -30,10 +30,36 @@ export function loadInitialState() {
     });
 }
 
+export function getAccountType(acc) {
+  if (!acc) return 'Bank';
+  if (acc.accountType) return acc.accountType;
+  var n = (acc.name || '').trim().toLowerCase();
+  if (n.indexOf('credit card') !== -1 || n === 'cc' || n.indexOf('card due') !== -1) return 'Credit Card';
+  if (n.indexOf('cash') !== -1) return 'Cash';
+  return 'Bank';
+}
+
+export function ensureSpecialAccounts(ud) {
+  if (!ud || !Array.isArray(ud.accounts)) return;
+  ud.accounts.forEach(function (a) {
+    if (!a.accountType) a.accountType = getAccountType(a);
+  });
+  var hasCash = ud.accounts.some(function (a) { return getAccountType(a) === 'Cash'; });
+  if (!hasCash) {
+    ud.accounts.push({ id: uid('acc'), name: 'Cash Account', accountType: 'Cash', opening: 0, createdAt: Date.now() });
+  }
+  var hasCC = ud.accounts.some(function (a) { return getAccountType(a) === 'Credit Card'; });
+  if (!hasCC) {
+    ud.accounts.push({ id: uid('acc'), name: 'Credit Card', accountType: 'Credit Card', opening: 0, createdAt: Date.now() });
+  }
+}
+
 export function freshUserData() {
   return {
     accounts: [
-      { id: uid('acc'), name: 'Primary Account', opening: 0, createdAt: Date.now() }
+      { id: uid('acc'), name: 'Primary Account', accountType: 'Bank', opening: 0, createdAt: Date.now() },
+      { id: uid('acc'), name: 'Cash Account', accountType: 'Cash', opening: 0, createdAt: Date.now() },
+      { id: uid('acc'), name: 'Credit Card', accountType: 'Credit Card', opening: 0, createdAt: Date.now() }
     ],
     categories: DEFAULT_CATEGORIES.map(function (c) { return { id: uid('cat'), name: c.name, budget: c.budget }; }),
     transactions: []
@@ -55,6 +81,7 @@ export function currentUserData() {
   if (!Array.isArray(ud.accounts)) ud.accounts = [];
   if (!Array.isArray(ud.categories)) ud.categories = [];
   if (!Array.isArray(ud.transactions)) ud.transactions = [];
+  ensureSpecialAccounts(ud);
   return ud;
 }
 
@@ -73,13 +100,89 @@ export function setSession(userId) {
   } catch (e) {}
 }
 
-export function accountBalance(acc, txs) {
+export function findCashAccount(accounts) {
+  return (accounts || []).find(function (a) { return getAccountType(a) === 'Cash'; }) || null;
+}
+
+export function findCreditCardAccount(accounts) {
+  return (accounts || []).find(function (a) { return getAccountType(a) === 'Credit Card'; }) || null;
+}
+
+/**
+ * Resolves which account an Income or Expense transaction actually affects:
+ * - If Payment Mode is 'Credit Card' (or account is a Credit Card), it routes to the Credit Card ledger (does NOT deduct from Bank).
+ * - If Payment Mode is 'Cash' (or account is a Cash account), it routes to the Cash Account (deducts from Cash Account, NOT Bank).
+ */
+export function effectiveTxAccountId(t, accounts) {
+  if (!t || (t.type !== 'Expense' && t.type !== 'Income')) return t ? t.accountId : null;
+  var acc = (accounts || []).find(function (a) { return a.id === t.accountId; });
+  var accType = acc ? getAccountType(acc) : 'Bank';
+
+  if (t.type === 'Expense' && (t.mode === 'Credit Card' || accType === 'Credit Card')) {
+    if (accType === 'Credit Card') return acc.id;
+    var cc = findCreditCardAccount(accounts);
+    if (cc) return cc.id;
+  }
+
+  if (t.mode === 'Cash' || accType === 'Cash') {
+    if (accType === 'Cash') return acc.id;
+    var cashAcc = findCashAccount(accounts);
+    if (cashAcc) return cashAcc.id;
+  }
+
+  return t.accountId;
+}
+
+export function isCreditCardTx(t, accounts) {
+  var ccIds = {};
+  (accounts || []).forEach(function (a) {
+    if (getAccountType(a) === 'Credit Card') ccIds[a.id] = true;
+  });
+  if (t.type === 'Expense' && (t.mode === 'Credit Card' || ccIds[t.accountId])) return true;
+  if ((t.type === 'CC Bill Payment' || t.type === 'Transfer') && (ccIds[t.toAccountId] || ccIds[t.fromAccountId])) return true;
+  return false;
+}
+
+export function isCashTx(t, accounts) {
+  var cashIds = {};
+  (accounts || []).forEach(function (a) {
+    if (getAccountType(a) === 'Cash') cashIds[a.id] = true;
+  });
+  if ((t.type === 'Expense' || t.type === 'Income') && (t.mode === 'Cash' || cashIds[t.accountId])) return true;
+  if (t.type === 'Transfer' && (cashIds[t.toAccountId] || cashIds[t.fromAccountId])) return true;
+  return false;
+}
+
+export function accountBalance(acc, txs, allAccounts) {
+  var accounts = allAccounts || currentUserData().accounts || [acc];
+  var accType = getAccountType(acc);
   var bal = Number(acc.opening) || 0;
+
+  if (accType === 'Credit Card') {
+    // Credit Card tracks unpaid CC Due (increases on CC Expense, decreases when bill is paid)
+    txs.forEach(function (t) {
+      var amt = Number(t.amount) || 0;
+      var effId = effectiveTxAccountId(t, accounts);
+      if (t.type === 'Expense' && effId === acc.id) {
+        bal += amt;
+      } else if ((t.type === 'CC Bill Payment' || t.type === 'Transfer') && t.toAccountId === acc.id) {
+        bal -= amt;
+      } else if (t.type === 'Income' && effId === acc.id) {
+        bal -= amt;
+      }
+    });
+    return bal;
+  }
+
+  // Bank or Cash Account
   txs.forEach(function (t) {
     var amt = Number(t.amount) || 0;
-    if (t.type === 'Income' && t.accountId === acc.id) bal += amt;
-    else if (t.type === 'Expense' && t.accountId === acc.id) bal -= amt;
-    else if (t.type === 'Transfer') {
+    var effId = effectiveTxAccountId(t, accounts);
+    if (t.type === 'Income' && effId === acc.id) {
+      bal += amt;
+    } else if (t.type === 'Expense' && effId === acc.id) {
+      bal -= amt;
+    } else if (t.type === 'Transfer' || t.type === 'CC Bill Payment') {
       if (t.fromAccountId === acc.id) bal -= amt;
       if (t.toAccountId === acc.id) bal += amt;
     }

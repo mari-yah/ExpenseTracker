@@ -8,6 +8,7 @@ import * as Theme from './theme.js';
 import { renderAuth } from './view-auth.js';
 import { renderDashboard } from './view-dashboard.js';
 import { renderTransactions } from './view-transactions.js';
+import { renderCreditCardLedger, renderCashLedger } from './view-ledgers.js';
 import { renderAccounts } from './view-accounts.js';
 import { renderCategories } from './view-categories.js';
 import { renderProfile } from './view-profile.js';
@@ -21,6 +22,8 @@ var ui = {
   editingTxId: null,
   txMonthFilter: 'all',
   txAccountFilter: 'all',
+  ccMonthFilter: 'all',
+  cashMonthFilter: 'all',
   profileError: '',
   profileNotice: '',
   importPreview: null,
@@ -51,6 +54,8 @@ function wireThemeToggles() {
 var NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
   { id: 'transactions', label: 'Transactions', icon: 'list' },
+  { id: 'cc-ledger', label: 'Credit Card', icon: 'card' },
+  { id: 'cash-ledger', label: 'Cash Ledger', icon: 'wallet' },
   { id: 'accounts', label: 'Accounts', icon: 'bank' },
   { id: 'categories', label: 'Categories', icon: 'tag' },
   { id: 'profile', label: 'Profile', icon: 'user' }
@@ -106,6 +111,8 @@ function renderShell(u) {
   var main = document.getElementById('mainArea');
   if (ui.tab === 'dashboard') renderDashboard(main, ui, render, u);
   else if (ui.tab === 'transactions') renderTransactions(main, ui, render, u);
+  else if (ui.tab === 'cc-ledger') renderCreditCardLedger(main, ui, render, u);
+  else if (ui.tab === 'cash-ledger') renderCashLedger(main, ui, render, u);
   else if (ui.tab === 'accounts') renderAccounts(main, ui, render, u);
   else if (ui.tab === 'categories') renderCategories(main, ui, render, u);
   else renderProfile(main, ui, render, u);
