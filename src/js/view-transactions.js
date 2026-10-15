@@ -1,4 +1,4 @@
-import { escapeHtml, inr, uid, todayStr, monthLabel, formatDate, icon } from './utils.js';
+import { escapeHtml, inr, uid, todayStr, formatDate, icon } from './utils.js';
 import { MODES } from './constants.js';
 import { toast, confirmModal } from './ui.js';
 import * as State from './state.js';
@@ -6,7 +6,6 @@ import * as State from './state.js';
 export function renderTransactions(main, ui, render, u) {
   var ud = State.currentUserData();
   var editingTx = ui.editingTxId ? ud.transactions.find(function (t) { return t.id === ui.editingTxId; }) : null;
-  var months = State.allMonthKeys(ud.transactions);
 
   ui.txCategoryFilter = ui.txCategoryFilter || 'all';
   ui.txTypeFilter = ui.txTypeFilter || 'all';
@@ -14,9 +13,6 @@ export function renderTransactions(main, ui, render, u) {
   ui.txDateFrom = ui.txDateFrom || '';
   ui.txDateTo = ui.txDateTo || '';
 
-  var monthFilterOptions = '<option value="all">All months</option>' + months.map(function (k) {
-    return '<option value="' + k + '" ' + (k === ui.txMonthFilter ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
-  }).join('');
   var acctFilterOptions = '<option value="all">All accounts</option>' + ud.accounts.map(function (a) {
     return '<option value="' + a.id + '" ' + (a.id === ui.txAccountFilter ? 'selected' : '') + '>' + escapeHtml(a.name) + ' (' + State.getAccountType(a) + ')</option>';
   }).join('');
@@ -37,10 +33,23 @@ export function renderTransactions(main, ui, render, u) {
       return '<option value="' + a.id + '" ' + (a.id === selected ? 'selected' : '') + '>' + escapeHtml(a.name) + '</option>';
     }).join('');
   }
-  var catOpts = ud.categories.map(function (c) {
-    var sel = editingTx && (editingTx.category === c.name) ? 'selected' : '';
-    return '<option value="' + escapeHtml(c.name) + '" ' + sel + '>' + escapeHtml(c.name) + '</option>';
-  }).join('');
+
+  function buildCatOptsForDate(dateVal, selectedCat) {
+    var mKey = (dateVal || todayStr).slice(0, 7);
+    var activeCats = State.categoriesForMonth(ud.categories, mKey);
+    var html = activeCats.map(function (c) {
+      var sel = selectedCat && (selectedCat === c.name) ? 'selected' : '';
+      return '<option value="' + escapeHtml(c.name) + '" ' + sel + '>' + escapeHtml(c.name) + '</option>';
+    }).join('');
+    if (selectedCat && !activeCats.some(function (c) { return c.name === selectedCat; })) {
+      html = '<option value="' + escapeHtml(selectedCat) + '" selected>' + escapeHtml(selectedCat) + '</option>' + html;
+    }
+    return html;
+  }
+
+  var initialDate = editingTx ? editingTx.date : todayStr;
+  var catOpts = buildCatOptsForDate(initialDate, editingTx ? editingTx.category : null);
+
   var modeOpts = MODES.map(function (m) {
     var sel = editingTx && editingTx.mode === m ? 'selected' : '';
     return '<option value="' + m + '" ' + sel + '>' + m + '</option>';
@@ -55,7 +64,7 @@ export function renderTransactions(main, ui, render, u) {
     '<div class="card" style="margin-bottom:22px;">' +
     (noAccounts ? '<div class="empty-note">Add an account in the Accounts tab before logging transactions.</div>' :
       '<form class="grid-form" id="txForm">' +
-      '<div class="field"><span class="field-label">Date</span><input type="date" name="date" max="' + todayStr + '" required value="' + (editingTx ? editingTx.date : todayStr) + '"></div>' +
+      '<div class="field"><span class="field-label">Date</span><input type="date" name="date" id="txDateInput" max="' + todayStr + '" required value="' + initialDate + '"></div>' +
       '<div class="field"><span class="field-label">Type</span><select name="type" id="typeSelect">' +
       '<option value="Expense" ' + (editingTx && editingTx.type === 'Expense' ? 'selected' : '') + '>Expense</option>' +
       '<option value="Income" ' + (editingTx && editingTx.type === 'Income' ? 'selected' : '') + '>Income</option>' +
@@ -78,14 +87,13 @@ export function renderTransactions(main, ui, render, u) {
 
     '<div class="card filter-panel" style="margin-bottom:16px; padding:14px 18px;">' +
     '<div class="filter-row" style="margin-bottom:0;">' +
-      '<div class="field"><span class="field-label">Month</span><select id="txMonthFilter">' + monthFilterOptions + '</select></div>' +
       '<div class="field"><span class="field-label">From Date</span><input type="date" id="txDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.txDateFrom) + '"></div>' +
       '<div class="field"><span class="field-label">To Date</span><input type="date" id="txDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.txDateTo) + '"></div>' +
       '<div class="field"><span class="field-label">Account</span><select id="txAcctFilter">' + acctFilterOptions + '</select></div>' +
       '<div class="field"><span class="field-label">Category</span><select id="txCatFilter">' + catFilterOptions + '</select></div>' +
       '<div class="field"><span class="field-label">Type</span><select id="txTypeFilter">' + typeFilterOptions + '</select></div>' +
       '<div class="field"><span class="field-label">Mode</span><select id="txModeFilter">' + modeFilterOptions + '</select></div>' +
-      ((ui.txMonthFilter !== 'all' || ui.txAccountFilter !== 'all' || ui.txCategoryFilter !== 'all' || ui.txTypeFilter !== 'all' || ui.txModeFilter !== 'all' || ui.txDateFrom || ui.txDateTo)
+      ((ui.txAccountFilter !== 'all' || ui.txCategoryFilter !== 'all' || ui.txTypeFilter !== 'all' || ui.txModeFilter !== 'all' || ui.txDateFrom || ui.txDateTo)
         ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="resetTxFilters">Clear filters</button></div>'
         : '') +
     '</div>' +
@@ -99,6 +107,12 @@ export function renderTransactions(main, ui, render, u) {
     var singleAcctSelect = document.getElementById('singleAcctSelect');
     var toAcctSelect = document.getElementById('toAcctSelect');
     var catSelect = document.getElementById('catSelect');
+    var txDateInput = document.getElementById('txDateInput');
+
+    txDateInput.addEventListener('change', function () {
+      var curCat = catSelect.value;
+      catSelect.innerHTML = buildCatOptsForDate(txDateInput.value, curCat);
+    });
 
     function toggleFields() {
       var type = typeSelect.value;
@@ -204,7 +218,6 @@ export function renderTransactions(main, ui, render, u) {
     if (cancelBtn) cancelBtn.addEventListener('click', function () { ui.editingTxId = null; render(); });
   }
 
-  document.getElementById('txMonthFilter').addEventListener('change', function (e) { ui.txMonthFilter = e.target.value; render(); });
   document.getElementById('txDateFrom').addEventListener('change', function (e) { ui.txDateFrom = e.target.value; render(); });
   document.getElementById('txDateTo').addEventListener('change', function (e) { ui.txDateTo = e.target.value; render(); });
   document.getElementById('txAcctFilter').addEventListener('change', function (e) { ui.txAccountFilter = e.target.value; render(); });
@@ -215,7 +228,6 @@ export function renderTransactions(main, ui, render, u) {
   var resetBtn = document.getElementById('resetTxFilters');
   if (resetBtn) {
     resetBtn.addEventListener('click', function () {
-      ui.txMonthFilter = 'all';
       ui.txDateFrom = '';
       ui.txDateTo = '';
       ui.txAccountFilter = 'all';
@@ -326,12 +338,11 @@ export function bindTxItemActions(container, u, ud, ui, render) {
 function renderTxTable(u, ud, ui, render) {
   var card = document.getElementById('txTableCard');
   var list = ud.transactions.filter(function (t) {
-    if (ui.txMonthFilter !== 'all' && t.date.slice(0, 7) !== ui.txMonthFilter) return false;
     if (ui.txDateFrom && t.date < ui.txDateFrom) return false;
     if (ui.txDateTo && t.date > ui.txDateTo) return false;
     if (ui.txAccountFilter !== 'all') {
       var effId = State.effectiveTxAccountId(t, ud.accounts);
-      var matches = effId === ui.txAccountFilter || t.accountId === ui.txAccountFilter || t.fromAccountId === ui.txAccountFilter || t.toAccountId === ui.txAccountFilter;
+      var matches = effId === ui.txAccountFilter || t.fromAccountId === ui.txAccountFilter || t.toAccountId === ui.txAccountFilter;
       if (!matches) return false;
     }
     if (ui.txCategoryFilter !== 'all' && t.category !== ui.txCategoryFilter) return false;

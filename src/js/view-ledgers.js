@@ -92,10 +92,9 @@ export function bindLedgerActions(container, u, ud, ui, render) {
   });
 }
 
-export function buildCategoryLedgerRows(ud, categoryName, dateFrom, dateTo, monthFilter) {
+export function buildCategoryLedgerRows(ud, categoryName, dateFrom, dateTo) {
   var txs = ud.transactions.filter(function (t) {
     if (categoryName !== 'all' && t.category !== categoryName) return false;
-    if (monthFilter && monthFilter !== 'all' && t.date.slice(0, 7) !== monthFilter) return false;
     if (dateFrom && t.date < dateFrom) return false;
     if (dateTo && t.date > dateTo) return false;
     return t.type === 'Expense' || t.type === 'Income';
@@ -126,17 +125,16 @@ export function buildCategoryLedgerRows(ud, categoryName, dateFrom, dateTo, mont
   return { creditRows: creditRows, debitRows: debitRows };
 }
 
-export function buildAccountLedgerRows(ud, accountId, dateFrom, dateTo, monthFilter) {
+export function buildAccountLedgerRows(ud, accountId, dateFrom, dateTo) {
   var acc = ud.accounts.find(function (a) { return a.id === accountId; });
   if (!acc) return { creditRows: [], debitRows: [], acc: null };
   var accType = State.getAccountType(acc);
 
   var txs = ud.transactions.filter(function (t) {
-    if (monthFilter && monthFilter !== 'all' && t.date.slice(0, 7) !== monthFilter) return false;
     if (dateFrom && t.date < dateFrom) return false;
     if (dateTo && t.date > dateTo) return false;
     var effId = State.effectiveTxAccountId(t, ud.accounts);
-    return effId === accountId || t.accountId === accountId || t.fromAccountId === accountId || t.toAccountId === accountId;
+    return effId === accountId || t.fromAccountId === accountId || t.toAccountId === accountId;
   }).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
 
   var creditRows = [];
@@ -217,18 +215,12 @@ export function buildAccountLedgerRows(ud, accountId, dateFrom, dateTo, monthFil
  */
 export function renderGeneralLedger(main, ui, render, u) {
   var ud = State.currentUserData();
-  var months = State.allMonthKeys(ud.transactions);
 
   ui.ledgerViewType = ui.ledgerViewType || 'category'; // 'category' | 'account'
   ui.ledgerCategory = ui.ledgerCategory || (ud.categories[0] ? ud.categories[0].name : 'all');
   ui.ledgerAccountId = ui.ledgerAccountId || (ud.accounts[0] ? ud.accounts[0].id : '');
-  ui.ledgerMonth = ui.ledgerMonth || 'all';
   ui.ledgerDateFrom = ui.ledgerDateFrom || '';
   ui.ledgerDateTo = ui.ledgerDateTo || '';
-
-  var monthOpts = '<option value="all">All months</option>' + months.map(function (k) {
-    return '<option value="' + k + '" ' + (k === ui.ledgerMonth ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
-  }).join('');
 
   var catOpts = '<option value="all" ' + (ui.ledgerCategory === 'all' ? 'selected' : '') + '>All Categories</option>' +
     ud.categories.map(function (c) {
@@ -241,7 +233,7 @@ export function renderGeneralLedger(main, ui, render, u) {
 
   var ledgerContentHtml = '';
   if (ui.ledgerViewType === 'category') {
-    var catRes = buildCategoryLedgerRows(ud, ui.ledgerCategory, ui.ledgerDateFrom, ui.ledgerDateTo, ui.ledgerMonth);
+    var catRes = buildCategoryLedgerRows(ud, ui.ledgerCategory, ui.ledgerDateFrom, ui.ledgerDateTo);
     var catTitle = (ui.ledgerCategory === 'all' ? 'All Categories' : ui.ledgerCategory) + ' — Category Ledger';
     ledgerContentHtml = renderTAccountHtml(
       catTitle,
@@ -251,7 +243,7 @@ export function renderGeneralLedger(main, ui, render, u) {
       catRes.debitRows
     );
   } else {
-    var accRes = buildAccountLedgerRows(ud, ui.ledgerAccountId, ui.ledgerDateFrom, ui.ledgerDateTo, ui.ledgerMonth);
+    var accRes = buildAccountLedgerRows(ud, ui.ledgerAccountId, ui.ledgerDateFrom, ui.ledgerDateTo);
     var acc = accRes.acc;
     var accType = acc ? State.getAccountType(acc) : 'Bank';
     var bal = acc ? State.accountBalance(acc, ud.transactions, ud.accounts) : 0;
@@ -275,7 +267,7 @@ export function renderGeneralLedger(main, ui, render, u) {
 
   main.insertAdjacentHTML('beforeend',
     '<div class="page-head">' +
-      '<div><h1>Ledgers</h1><div class="sub">Classic T-Account ledger view — Credit on the left, Debit on the right, with period filters.</div></div>' +
+      '<div><h1>Ledgers</h1><div class="sub">Classic T-Account ledger view — Credit on the left, Debit on the right, with custom date filters.</div></div>' +
       '<div class="ledger-mode-switch">' +
         '<button type="button" class="btn ' + (ui.ledgerViewType === 'category' ? '' : 'secondary') + '" id="switchCatLedger">Category Ledger</button>' +
         '<button type="button" class="btn ' + (ui.ledgerViewType === 'account' ? '' : 'secondary') + '" id="switchAcctLedger">Account Ledger</button>' +
@@ -287,11 +279,10 @@ export function renderGeneralLedger(main, ui, render, u) {
         (ui.ledgerViewType === 'category'
           ? '<div class="field"><span class="field-label">Select Category</span><select id="ledgerCatSelect">' + catOpts + '</select></div>'
           : '<div class="field"><span class="field-label">Select Account</span><select id="ledgerAcctSelect">' + acctOpts + '</select></div>') +
-        '<div class="field"><span class="field-label">Month</span><select id="ledgerMonthSelect">' + monthOpts + '</select></div>' +
         '<div class="field"><span class="field-label">From Date</span><input type="date" id="ledgerDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.ledgerDateFrom) + '"></div>' +
         '<div class="field"><span class="field-label">To Date</span><input type="date" id="ledgerDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.ledgerDateTo) + '"></div>' +
-        ((ui.ledgerMonth !== 'all' || ui.ledgerDateFrom || ui.ledgerDateTo)
-          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearLedgerDates">Reset Period</button></div>'
+        ((ui.ledgerDateFrom || ui.ledgerDateTo)
+          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearLedgerDates">Reset Dates</button></div>'
           : '') +
       '</div>' +
     '</div>' +
@@ -314,14 +305,12 @@ export function renderGeneralLedger(main, ui, render, u) {
   var acctSel = document.getElementById('ledgerAcctSelect');
   if (acctSel) acctSel.addEventListener('change', function (e) { ui.ledgerAccountId = e.target.value; render(); });
 
-  document.getElementById('ledgerMonthSelect').addEventListener('change', function (e) { ui.ledgerMonth = e.target.value; render(); });
   document.getElementById('ledgerDateFrom').addEventListener('change', function (e) { ui.ledgerDateFrom = e.target.value; render(); });
   document.getElementById('ledgerDateTo').addEventListener('change', function (e) { ui.ledgerDateTo = e.target.value; render(); });
 
   var clearBtn = document.getElementById('clearLedgerDates');
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
-      ui.ledgerMonth = 'all';
       ui.ledgerDateFrom = '';
       ui.ledgerDateTo = '';
       render();
@@ -333,14 +322,8 @@ export function renderGeneralLedger(main, ui, render, u) {
 
 export function renderCreditCardLedger(main, ui, render, u) {
   var ud = State.currentUserData();
-  var months = State.allMonthKeys(ud.transactions);
-  ui.ccMonthFilter = ui.ccMonthFilter || 'all';
   ui.ccDateFrom = ui.ccDateFrom || '';
   ui.ccDateTo = ui.ccDateTo || '';
-
-  var monthFilterOptions = '<option value="all">All months</option>' + months.map(function (k) {
-    return '<option value="' + k + '" ' + (k === ui.ccMonthFilter ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
-  }).join('');
 
   var ccAccounts = ud.accounts.filter(function (a) { return State.getAccountType(a) === 'Credit Card'; });
   var bankAccounts = ud.accounts.filter(function (a) { return State.getAccountType(a) === 'Bank'; });
@@ -349,7 +332,7 @@ export function renderCreditCardLedger(main, ui, render, u) {
   var bankOpts = bankAccounts.map(function (a) { return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>'; }).join('');
 
   var ccAccId = ccAccounts[0] ? ccAccounts[0].id : '';
-  var accRes = buildAccountLedgerRows(ud, ccAccId, ui.ccDateFrom, ui.ccDateTo, ui.ccMonthFilter);
+  var accRes = buildAccountLedgerRows(ud, ccAccId, ui.ccDateFrom, ui.ccDateTo);
 
   var totalCcSpent = accRes.debitRows.reduce(function (s, r) { return s + r.amount; }, 0);
   var totalCcPaid = accRes.creditRows.reduce(function (s, r) { return s + r.amount; }, 0);
@@ -385,11 +368,10 @@ export function renderCreditCardLedger(main, ui, render, u) {
 
     '<div class="card filter-panel" style="margin-bottom:16px; padding:14px 18px;">' +
     '<div class="filter-row" style="margin-bottom:0;">' +
-    '<div class="field"><span class="field-label">Month</span><select id="ccMonthFilter">' + monthFilterOptions + '</select></div>' +
     '<div class="field"><span class="field-label">From Date</span><input type="date" id="ccDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.ccDateFrom) + '"></div>' +
     '<div class="field"><span class="field-label">To Date</span><input type="date" id="ccDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.ccDateTo) + '"></div>' +
-    ((ui.ccMonthFilter !== 'all' || ui.ccDateFrom || ui.ccDateTo)
-      ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearCcDates">Reset Period</button></div>'
+    ((ui.ccDateFrom || ui.ccDateTo)
+      ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearCcDates">Reset Dates</button></div>'
       : '') +
     '</div>' +
     '</div>' +
@@ -456,25 +438,18 @@ export function renderCreditCardLedger(main, ui, render, u) {
     });
   });
 
-  document.getElementById('ccMonthFilter').addEventListener('change', function (e) { ui.ccMonthFilter = e.target.value; render(); });
   document.getElementById('ccDateFrom').addEventListener('change', function (e) { ui.ccDateFrom = e.target.value; render(); });
   document.getElementById('ccDateTo').addEventListener('change', function (e) { ui.ccDateTo = e.target.value; render(); });
   var clearCc = document.getElementById('clearCcDates');
-  if (clearCc) clearCc.addEventListener('click', function () { ui.ccMonthFilter = 'all'; ui.ccDateFrom = ''; ui.ccDateTo = ''; render(); });
+  if (clearCc) clearCc.addEventListener('click', function () { ui.ccDateFrom = ''; ui.ccDateTo = ''; render(); });
 
   bindLedgerActions(document.getElementById('ccListCard'), u, ud, ui, render);
 }
 
 export function renderCashLedger(main, ui, render, u) {
   var ud = State.currentUserData();
-  var months = State.allMonthKeys(ud.transactions);
-  ui.cashMonthFilter = ui.cashMonthFilter || 'all';
   ui.cashDateFrom = ui.cashDateFrom || '';
   ui.cashDateTo = ui.cashDateTo || '';
-
-  var monthFilterOptions = '<option value="all">All months</option>' + months.map(function (k) {
-    return '<option value="' + k + '" ' + (k === ui.cashMonthFilter ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
-  }).join('');
 
   var cashAccounts = ud.accounts.filter(function (a) { return State.getAccountType(a) === 'Cash'; });
   var bankAccounts = ud.accounts.filter(function (a) { return State.getAccountType(a) === 'Bank'; });
@@ -483,7 +458,7 @@ export function renderCashLedger(main, ui, render, u) {
   var bankOpts = bankAccounts.map(function (a) { return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>'; }).join('');
 
   var cashAccId = cashAccounts[0] ? cashAccounts[0].id : '';
-  var accRes = buildAccountLedgerRows(ud, cashAccId, ui.cashDateFrom, ui.cashDateTo, ui.cashMonthFilter);
+  var accRes = buildAccountLedgerRows(ud, cashAccId, ui.cashDateFrom, ui.cashDateTo);
 
   var cashAdded = accRes.creditRows.reduce(function (s, r) { return s + r.amount; }, 0);
   var cashSpent = accRes.debitRows.reduce(function (s, r) { return s + r.amount; }, 0);
@@ -520,11 +495,10 @@ export function renderCashLedger(main, ui, render, u) {
 
     '<div class="card filter-panel" style="margin-bottom:16px; padding:14px 18px;">' +
     '<div class="filter-row" style="margin-bottom:0;">' +
-    '<div class="field"><span class="field-label">Month</span><select id="cashMonthFilter">' + monthFilterOptions + '</select></div>' +
     '<div class="field"><span class="field-label">From Date</span><input type="date" id="cashDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.cashDateFrom) + '"></div>' +
     '<div class="field"><span class="field-label">To Date</span><input type="date" id="cashDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.cashDateTo) + '"></div>' +
-    ((ui.cashMonthFilter !== 'all' || ui.cashDateFrom || ui.cashDateTo)
-      ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearCashDates">Reset Period</button></div>'
+    ((ui.cashDateFrom || ui.cashDateTo)
+      ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearCashDates">Reset Dates</button></div>'
       : '') +
     '</div>' +
     '</div>' +
@@ -591,11 +565,10 @@ export function renderCashLedger(main, ui, render, u) {
     });
   });
 
-  document.getElementById('cashMonthFilter').addEventListener('change', function (e) { ui.cashMonthFilter = e.target.value; render(); });
   document.getElementById('cashDateFrom').addEventListener('change', function (e) { ui.cashDateFrom = e.target.value; render(); });
   document.getElementById('cashDateTo').addEventListener('change', function (e) { ui.cashDateTo = e.target.value; render(); });
   var clearCash = document.getElementById('clearCashDates');
-  if (clearCash) clearCash.addEventListener('click', function () { ui.cashMonthFilter = 'all'; ui.cashDateFrom = ''; ui.cashDateTo = ''; render(); });
+  if (clearCash) clearCash.addEventListener('click', function () { ui.cashDateFrom = ''; ui.cashDateTo = ''; render(); });
 
   bindLedgerActions(document.getElementById('cashListCard'), u, ud, ui, render);
 }

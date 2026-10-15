@@ -376,3 +376,13 @@
   .import-preview p strong{ color:var(--ink); }
   .danger-zone{ border:1px solid var(--border); background:var(--surface-soft); border-radius:14px; padding:18px 20px; }
   .danger-zone h3{ color:var(--ink); }
+
+  /* ---- categories 2-column layout ---- */
+  .cat-two-col-grid{ display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+  .cat-col{ background:var(--surface-soft); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .cat-col-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:12px; margin-bottom:14px; border-bottom:1px solid var(--border); }
+  .cat-col-head h3{ font-family:var(--font-head); font-size:0.98rem; font-weight:700; color:var(--ink); margin:0; }
+  .cat-col .cat-grid{ grid-template-columns:1fr; }
+  @media (max-width:900px){
+    .cat-two-col-grid{ grid-template-columns:1fr; }
+  }

@@ -85,8 +85,22 @@ export function currentUserData() {
   return ud;
 }
 
+export function isCategoryActiveInMonth(cat, monthKey) {
+  if (!cat) return false;
+  if (!cat.monthOnly) return true;
+  if (!monthKey) return true;
+  return cat.monthOnly === monthKey;
+}
+
+export function categoriesForMonth(categories, monthKey) {
+  return (categories || []).filter(function (c) {
+    return isCategoryActiveInMonth(c, monthKey);
+  });
+}
+
 export function categoryBudget(cat, monthKey) {
   if (!cat) return 0;
+  if (cat.monthOnly && monthKey && cat.monthOnly !== monthKey) return 0;
   if (cat.monthlyBudgets && monthKey && cat.monthlyBudgets[monthKey] !== undefined) {
     return Number(cat.monthlyBudgets[monthKey]) || 0;
   }

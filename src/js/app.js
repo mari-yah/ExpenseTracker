@@ -2,7 +2,7 @@
 // bottom nav), and dispatches to the tab-specific view modules. Each view
 // is its own small file — see js/view-*.js — kept independent of one
 // another and wired together only here.
-import { escapeHtml, initials, icon, pad, today } from './utils.js';
+import { escapeHtml, initials, icon, pad, today, todayStr } from './utils.js';
 import * as State from './state.js';
 import * as Theme from './theme.js';
 import { renderAuth } from './view-auth.js';
@@ -13,15 +13,19 @@ import { renderAccounts } from './view-accounts.js';
 import { renderCategories } from './view-categories.js';
 import { renderProfile } from './view-profile.js';
 
+var startOfCurrentMonth = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-01';
+
 var ui = {
   authMode: null,
   authError: '',
   tab: 'dashboard',
-  dashMonth: today.getFullYear() + '-' + pad(today.getMonth() + 1),
+  dashDateFrom: startOfCurrentMonth,
+  dashDateTo: todayStr,
   dashAccount: 'all',
   editingTxId: null,
-  txMonthFilter: 'all',
   txAccountFilter: 'all',
+  catDateFrom: startOfCurrentMonth,
+  catDateTo: todayStr,
   profileError: '',
   profileNotice: '',
   importPreview: null,

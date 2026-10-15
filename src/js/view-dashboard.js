@@ -1,20 +1,25 @@
-import { escapeHtml, inr, monthLabel } from './utils.js';
+import { escapeHtml, inr, todayStr, pad, today } from './utils.js';
 import * as State from './state.js';
 
 export function renderDashboard(main, ui, render, u) {
   var ud = State.currentUserData();
-  var months = State.allMonthKeys(ud.transactions);
-  var monthOptions = months.map(function (k) {
-    return '<option value="' + k + '" ' + (k === ui.dashMonth ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
-  }).join('');
+  var defaultStart = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-01';
+  if (ui.dashDateFrom === undefined) ui.dashDateFrom = defaultStart;
+  if (ui.dashDateTo === undefined) ui.dashDateTo = todayStr;
+
   var acctOptions = '<option value="all">All accounts</option>' + ud.accounts.map(function (a) {
     return '<option value="' + a.id + '" ' + (a.id === ui.dashAccount ? 'selected' : '') + '>' + escapeHtml(a.name) + '</option>';
   }).join('');
 
-  var monthTx = ud.transactions.filter(function (t) { return t.date.slice(0, 7) === ui.dashMonth; });
-  var scopedTx = ui.dashAccount === 'all' ? monthTx : monthTx.filter(function (t) {
+  var periodTx = ud.transactions.filter(function (t) {
+    if (ui.dashDateFrom && t.date < ui.dashDateFrom) return false;
+    if (ui.dashDateTo && t.date > ui.dashDateTo) return false;
+    return true;
+  });
+
+  var scopedTx = ui.dashAccount === 'all' ? periodTx : periodTx.filter(function (t) {
     var effId = State.effectiveTxAccountId(t, ud.accounts);
-    return effId === ui.dashAccount || t.accountId === ui.dashAccount || t.fromAccountId === ui.dashAccount || t.toAccountId === ui.dashAccount;
+    return effId === ui.dashAccount || t.fromAccountId === ui.dashAccount || t.toAccountId === ui.dashAccount;
   });
 
   var income = scopedTx.filter(function (t) { return t.type === 'Income'; }).reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
@@ -26,13 +31,14 @@ export function renderDashboard(main, ui, render, u) {
     var key = t.category || 'Uncategorized';
     spendByCat[key] = (spendByCat[key] || 0) + Number(t.amount || 0);
   });
-  var topCat = '—', topAmt = 0;
-  Object.keys(spendByCat).forEach(function (k) { if (spendByCat[k] > topAmt) { topCat = k; topAmt = spendByCat[k]; } });
+
+  var activeMonthKey = (ui.dashDateFrom || ui.dashDateTo || todayStr).slice(0, 7);
+  var activeCategories = State.categoriesForMonth(ud.categories, activeMonthKey);
 
   var overCount = 0, warnCount = 0;
-  var budgetRows = ud.categories.map(function (c) {
+  var budgetRows = activeCategories.map(function (c) {
     var spent = spendByCat[c.name] || 0;
-    var budget = State.categoryBudget(c, ui.dashMonth);
+    var budget = State.categoryBudget(c, activeMonthKey);
     var pct = budget > 0 ? spent / budget : 0;
     var status = 'ok';
     if (budget === 0) { status = 'unbudgeted'; }
@@ -41,19 +47,19 @@ export function renderDashboard(main, ui, render, u) {
     return { name: c.name, budget: budget, spent: spent, pct: pct, status: status };
   });
 
-  var bannerClass = 'ok', bannerText = 'All categories are within budget this month.';
-  if (overCount > 0) { bannerClass = 'over'; bannerText = overCount + ' categor' + (overCount === 1 ? 'y is' : 'ies are') + ' over budget this month.'; }
-  else if (warnCount > 0) { bannerClass = 'warn'; bannerText = warnCount + ' categor' + (warnCount === 1 ? 'y is' : 'ies are') + ' close to its limit (80%+ spent).'; }
+  var bannerClass = 'ok', bannerText = 'All categories are within budget for this period.';
+  if (overCount > 0) { bannerClass = 'over'; bannerText = overCount + ' categor' + (overCount === 1 ? 'y is' : 'ies are') + ' over budget in this period.'; }
+  else if (warnCount > 0) { bannerClass = 'warn'; bannerText = warnCount + ' categor' + (warnCount === 1 ? 'y is' : 'ies are') + ' close to its limit (85%+ spent).'; }
 
   var chartCats = Object.keys(spendByCat).map(function (k) { return [k, spendByCat[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
   var maxSpend = chartCats.length ? chartCats[0][1] : 0;
 
-  var totalBudget = ud.categories.reduce(function (sum, c) {
-    return sum + State.categoryBudget(c, ui.dashMonth);
+  var totalBudget = activeCategories.reduce(function (sum, c) {
+    return sum + State.categoryBudget(c, activeMonthKey);
   }, 0);
 
   main.insertAdjacentHTML('beforeend',
-    '<div class="page-head"><div><h1>Dashboard</h1><div class="sub">Where your money stands, this month.</div></div></div>' +
+    '<div class="page-head"><div><h1>Dashboard</h1><div class="sub">Where your money stands across your accounts and custom date range.</div></div></div>' +
 
     '<div class="accounts-row">' + ud.accounts.map(function (a) {
       var accType = State.getAccountType(a);
@@ -63,9 +69,20 @@ export function renderDashboard(main, ui, render, u) {
         '<div class="bal num ' + (bal < 0 ? 'neg' : '') + '">' + inr(bal) + '</div></div>';
     }).join('') + '</div>' +
 
-    '<div class="toolbar">' +
-    '<div class="field"><span class="field-label">Statement for</span><select id="monthSelect">' + monthOptions + '</select></div>' +
+    '<div class="card filter-panel" style="margin-bottom:20px; padding:14px 18px;">' +
+    '<div class="filter-row" style="margin-bottom:0;">' +
+    '<div class="field"><span class="field-label">From Date</span><input type="date" id="dashDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateFrom) + '"></div>' +
+    '<div class="field"><span class="field-label">To Date</span><input type="date" id="dashDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateTo) + '"></div>' +
     '<div class="field"><span class="field-label">Account</span><select id="acctSelect">' + acctOptions + '</select></div>' +
+    '<div class="field" style="align-self:flex-end; display:flex; gap:8px; flex-direction:row;">' +
+      ((ui.dashDateFrom !== defaultStart || ui.dashDateTo !== todayStr || ui.dashAccount !== 'all')
+        ? '<button type="button" class="btn secondary sm" id="resetDashPeriod">This Month</button>'
+        : '') +
+      ((ui.dashDateFrom || ui.dashDateTo)
+        ? '<button type="button" class="btn secondary sm" id="allTimeDashPeriod">All Dates</button>'
+        : '') +
+    '</div>' +
+    '</div>' +
     '</div>' +
 
     '<div class="alert-banner ' + bannerClass + '">' + bannerText + '</div>' +
@@ -82,10 +99,11 @@ export function renderDashboard(main, ui, render, u) {
       var activeBudgetRows = budgetRows.filter(function (r) { return r.spent > 0; });
       return '<div class="card">' + (activeBudgetRows.length === 0 ? '<div class="empty-note">No expenses logged for any category in this period.</div>' :
         activeBudgetRows.map(function (r) {
+          var amtSub = r.budget > 0 ? (inr(r.spent) + ' of ' + inr(r.budget)) : (inr(r.spent) + ' (No budget)');
           return '<div class="budget-row"><div><div class="cat-name">' + escapeHtml(r.name) + '</div>' +
-            '<div class="amounts num">' + inr(r.spent) + ' of ' + inr(r.budget) + '</div></div>' +
+            '<div class="amounts num">' + amtSub + '</div></div>' +
             '<div class="bar-track"><div class="bar-fill ' + r.status + '" style="width:' + Math.min(r.pct * 100, 100) + '%"></div></div>' +
-            '<div class="status-pill ' + r.status + '">' + (r.status === 'unbudgeted' ? 'Unbudgeted' : (r.status === 'over' ? 'Over budget' : r.status === 'warn' ? 'Warning' : 'On track')) + '</div></div>';
+            '<div class="status-pill ' + r.status + '">' + (r.status === 'unbudgeted' ? 'No budget' : (r.status === 'over' ? 'Over budget' : r.status === 'warn' ? 'Warning' : 'On track')) + '</div></div>';
         }).join('')) + '</div>';
     })() +
 
@@ -98,6 +116,25 @@ export function renderDashboard(main, ui, render, u) {
       }).join('') + '</div>') + '</div>'
   );
 
-  document.getElementById('monthSelect').addEventListener('change', function (e) { ui.dashMonth = e.target.value; render(); });
+  document.getElementById('dashDateFrom').addEventListener('change', function (e) { ui.dashDateFrom = e.target.value; render(); });
+  document.getElementById('dashDateTo').addEventListener('change', function (e) { ui.dashDateTo = e.target.value; render(); });
   document.getElementById('acctSelect').addEventListener('change', function (e) { ui.dashAccount = e.target.value; render(); });
+
+  var resetBtn = document.getElementById('resetDashPeriod');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      ui.dashDateFrom = defaultStart;
+      ui.dashDateTo = todayStr;
+      ui.dashAccount = 'all';
+      render();
+    });
+  }
+  var allTimeBtn = document.getElementById('allTimeDashPeriod');
+  if (allTimeBtn) {
+    allTimeBtn.addEventListener('click', function () {
+      ui.dashDateFrom = '';
+      ui.dashDateTo = '';
+      render();
+    });
+  }
 }
