@@ -16,7 +16,7 @@ function typeSelectHtml(selected) {
 export function renderAccounts(main, ui, render, u) {
   var ud = State.currentUserData();
   main.insertAdjacentHTML('beforeend',
-    '<div class="page-head"><div><h1>Accounts</h1><div class="sub">Track Bank accounts, Cash account, and Credit Card ledgers.</div></div></div>' +
+    '<div class="page-head"><div><h1>Accounts</h1><div class="sub">Track Bank accounts, Cash account, and Credit Card balances.</div></div></div>' +
     '<p class="help-text">Bank accounts track bank balances. Your <strong>Cash Account</strong> increases when you transfer from Bank and deducts whenever payment mode is Cash. Your <strong>Credit Card</strong> tracks unpaid CC due without deducting from your Bank account until you log a CC Bill Payment.</p>' +
     '<form class="manage-form" id="acctForm">' +
     '<div class="field"><span class="field-label">Account name</span><input type="text" name="name" placeholder="e.g. HDFC Bank / ICICI CC" required></div>' +

@@ -55,7 +55,8 @@ var ICON_PATHS = {
   check: '<path d="M20 6L9 17l-5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   x: '<path d="M18 6L6 18M6 6l12 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2" stroke-width="1.8"/><path d="M2 10h20M6 15h4" stroke-width="1.8" stroke-linecap="round"/>',
-  wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="15" y="9" width="7" height="6" rx="1.5" stroke-width="1.8"/><circle cx="17.5" cy="12" r="0.8" fill="currentColor"/>'
+  wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="15" y="9" width="7" height="6" rx="1.5" stroke-width="1.8"/><circle cx="17.5" cy="12" r="0.8" fill="currentColor"/>',
+  book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 var FILL_ICONS = { dashboard: 1, tag: 1 };
 

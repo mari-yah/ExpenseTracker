@@ -1,6 +1,7 @@
 import { escapeHtml, uid, icon, todayStr, monthLabel, inr } from './utils.js';
 import { confirmModal } from './ui.js';
 import * as State from './state.js';
+import { buildCategoryLedgerRows, renderTAccountHtml, bindLedgerActions } from './view-ledgers.js';
 
 export function renderCategories(main, ui, render, u) {
   var ud = State.currentUserData();
@@ -10,12 +11,28 @@ export function renderCategories(main, ui, render, u) {
     months = [ui.catMonth].concat(months);
   }
 
+  ui.selectedCatLedger = ui.selectedCatLedger || (ud.categories[0] ? ud.categories[0].name : 'all');
+  ui.catLedgerMonth = ui.catLedgerMonth || 'all';
+  ui.catLedgerFrom = ui.catLedgerFrom || '';
+  ui.catLedgerTo = ui.catLedgerTo || '';
+
   var monthOptions = months.map(function (k) {
     return '<option value="' + k + '" ' + (k === ui.catMonth ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
   }).join('');
 
+  var ledgerMonthOptions = '<option value="all">All months</option>' + months.map(function (k) {
+    return '<option value="' + k + '" ' + (k === ui.catLedgerMonth ? 'selected' : '') + '>' + monthLabel(k) + '</option>';
+  }).join('');
+
+  var catSelectOptions = '<option value="all" ' + (ui.selectedCatLedger === 'all' ? 'selected' : '') + '>All Categories</option>' +
+    ud.categories.map(function (c) {
+      return '<option value="' + escapeHtml(c.name) + '" ' + (c.name === ui.selectedCatLedger ? 'selected' : '') + '>' + escapeHtml(c.name) + '</option>';
+    }).join('');
+
+  var catLedgerRes = buildCategoryLedgerRows(ud, ui.selectedCatLedger, ui.catLedgerFrom, ui.catLedgerTo, ui.catLedgerMonth);
+
   main.insertAdjacentHTML('beforeend',
-    '<div class="page-head"><div><h1>Categories</h1><div class="sub">Set monthly budgets per month to track spending against.</div></div></div>' +
+    '<div class="page-head"><div><h1>Categories</h1><div class="sub">Set monthly budgets per month and inspect individual Category Ledgers.</div></div></div>' +
     '<div class="toolbar" style="margin-bottom:18px;">' +
     '<div class="field"><span class="field-label">Budget Month</span><select id="catMonthSelect">' + monthOptions + '</select></div>' +
     '</div>' +
@@ -30,6 +47,7 @@ export function renderCategories(main, ui, render, u) {
       ud.categories.map(function (c) {
         var currentBudget = State.categoryBudget(c, ui.catMonth);
         var isEditing = ui.editingCategoryId === c.id;
+        var isActiveLedger = ui.selectedCatLedger === c.name;
         if (isEditing) {
           return '<div class="cat-m-item editing" data-id="' + c.id + '">' +
             '<form class="catEditForm cat-edit-row">' +
@@ -42,17 +60,41 @@ export function renderCategories(main, ui, render, u) {
             '</form>' +
           '</div>';
         }
-        return '<div class="cat-m-item" data-id="' + c.id + '">' +
+        return '<div class="cat-m-item ' + (isActiveLedger ? 'active-ledger-card' : '') + '" data-id="' + c.id + '" data-name="' + escapeHtml(c.name) + '">' +
           '<div class="cat-m-main">' +
             '<div class="cat-m-name-wrap"><span class="cat-m-lbl">Category</span><div class="cat-m-title">' + escapeHtml(c.name) + '</div></div>' +
             '<div class="cat-m-budget-wrap"><span class="cat-m-lbl">Budget (' + monthLabel(ui.catMonth) + ')</span><div class="cat-m-val num">₹ ' + Number(currentBudget).toLocaleString('en-IN') + '</div></div>' +
           '</div>' +
           '<div class="card-icon-actions">' +
+            '<button type="button" class="btn secondary sm viewCatLedgerBtn" title="View Category Ledger">Ledger</button>' +
             '<button type="button" class="icon-btn editCat" title="Edit category">' + icon('edit') + '</button>' +
             '<button type="button" class="icon-btn del delCat" title="Delete category">' + icon('trash') + '</button>' +
           '</div>' +
         '</div>';
-      }).join('') + '</div>') + '</div>'
+      }).join('') + '</div>') + '</div>' +
+
+    /* Category Ledger Section right on the Categories page */
+    '<h2 class="section-title" id="catLedgerSection" style="margin-top:34px;">Category Ledger (Credit on Left • Debit on Right)</h2>' +
+    '<div class="card filter-panel" style="margin-bottom:16px; padding:14px 18px;">' +
+      '<div class="filter-row" style="margin-bottom:0;">' +
+        '<div class="field"><span class="field-label">Category</span><select id="catLedgerSelect">' + catSelectOptions + '</select></div>' +
+        '<div class="field"><span class="field-label">Month</span><select id="catLedgerMonthSelect">' + ledgerMonthOptions + '</select></div>' +
+        '<div class="field"><span class="field-label">From Date</span><input type="date" id="catLedgerFrom" max="' + todayStr + '" value="' + escapeHtml(ui.catLedgerFrom) + '"></div>' +
+        '<div class="field"><span class="field-label">To Date</span><input type="date" id="catLedgerTo" max="' + todayStr + '" value="' + escapeHtml(ui.catLedgerTo) + '"></div>' +
+        ((ui.catLedgerMonth !== 'all' || ui.catLedgerFrom || ui.catLedgerTo)
+          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearCatLedgerDates">Reset Period</button></div>'
+          : '') +
+      '</div>' +
+    '</div>' +
+    '<div id="catLedgerBox">' +
+      renderTAccountHtml(
+        (ui.selectedCatLedger === 'all' ? 'All Categories' : ui.selectedCatLedger) + ' — Category Ledger',
+        'CREDIT (CR) — INCOMES / REFUNDS',
+        'DEBIT (DR) — PAYMENTS / EXPENSES',
+        catLedgerRes.creditRows,
+        catLedgerRes.debitRows
+      ) +
+    '</div>'
   );
 
   document.getElementById('catMonthSelect').addEventListener('change', function (e) {
@@ -69,6 +111,15 @@ export function renderCategories(main, ui, render, u) {
     var newCat = { id: uid('cat'), name: name, budget: defaultBudget, monthlyBudgets: {} };
     newCat.monthlyBudgets[ui.catMonth] = defaultBudget;
     State.commitUserData(u, Object.assign({}, ud, { categories: ud.categories.concat([newCat]) }), { successMsg: 'Category added.' });
+  });
+
+  main.querySelectorAll('.viewCatLedgerBtn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      ui.selectedCatLedger = btn.closest('[data-name]').dataset.name;
+      render();
+      var sec = document.getElementById('catLedgerSection');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+    });
   });
 
   main.querySelectorAll('.editCat').forEach(function (btn) {
@@ -124,4 +175,21 @@ export function renderCategories(main, ui, render, u) {
       });
     });
   });
+
+  document.getElementById('catLedgerSelect').addEventListener('change', function (e) { ui.selectedCatLedger = e.target.value; render(); });
+  document.getElementById('catLedgerMonthSelect').addEventListener('change', function (e) { ui.catLedgerMonth = e.target.value; render(); });
+  document.getElementById('catLedgerFrom').addEventListener('change', function (e) { ui.catLedgerFrom = e.target.value; render(); });
+  document.getElementById('catLedgerTo').addEventListener('change', function (e) { ui.catLedgerTo = e.target.value; render(); });
+
+  var clearCatDates = document.getElementById('clearCatLedgerDates');
+  if (clearCatDates) {
+    clearCatDates.addEventListener('click', function () {
+      ui.catLedgerMonth = 'all';
+      ui.catLedgerFrom = '';
+      ui.catLedgerTo = '';
+      render();
+    });
+  }
+
+  bindLedgerActions(document.getElementById('catLedgerBox'), u, ud, ui, render);
 }

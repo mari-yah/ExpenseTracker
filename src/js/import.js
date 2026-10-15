@@ -124,7 +124,7 @@ export function parseImportCsv(text, ud) {
       var acc = resolveAccount(get('account'));
       if (!acc) { rowErrors.push('Row ' + (r + 1) + ': missing Account.'); continue; }
       record.accountId = acc.id;
-      if (type === 'Expense') record.category = resolveCategory(get('category'));
+      if (type === 'Expense' || type === 'Income') record.category = resolveCategory(get('category'));
     }
 
     // Only checked against transactions that existed before this import —
