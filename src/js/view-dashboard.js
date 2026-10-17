@@ -81,24 +81,22 @@ export function renderDashboard(main, ui, render, u) {
         '<div class="bal num ' + (bal < 0 ? 'neg' : '') + '">' + inr(bal) + '</div></div>';
     }).join('') + '</div>' +
 
-    '<div class="card filter-panel" style="margin-bottom:20px; padding:16px 20px;">' +
-      '<div class="filter-row" style="margin-bottom:14px;">' +
+    '<div class="card filter-panel" style="margin-bottom:20px; padding:14px 18px;">' +
+      '<div class="filter-row" id="dashMultiFilters" style="margin-bottom:0;">' +
         '<div class="field"><span class="field-label">From Date</span><input type="date" id="dashDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateFrom) + '"></div>' +
         '<div class="field"><span class="field-label">To Date</span><input type="date" id="dashDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateTo) + '"></div>' +
+        renderMultiFilterGroup('dash_account', 'Accounts', dynOpts.accounts, ui.dashAccounts) +
+        renderMultiFilterGroup('dash_category', 'Categories', dynOpts.categories, ui.dashCategories) +
+        renderMultiFilterGroup('dash_type', 'Types', dynOpts.types, ui.dashTypes) +
+        renderMultiFilterGroup('dash_mode', 'Modes', dynOpts.modes, ui.dashModes) +
         '<div class="field" style="align-self:flex-end; display:flex; gap:8px; flex-direction:row; flex-wrap:wrap;">' +
           ((ui.dashDateFrom !== defaultStart || ui.dashDateTo !== todayStr || hasActiveMulti)
-            ? '<button type="button" class="btn secondary sm" id="resetDashPeriod">Reset / This Month</button>'
+            ? '<button type="button" class="btn secondary sm" id="resetDashPeriod">This Month</button>'
             : '') +
           ((ui.dashDateFrom || ui.dashDateTo)
             ? '<button type="button" class="btn secondary sm" id="allTimeDashPeriod">All Dates</button>'
             : '') +
         '</div>' +
-      '</div>' +
-      '<div class="multi-filter-stack" id="dashMultiFilters">' +
-        renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.dashAccounts) +
-        renderMultiFilterGroup('type', 'Types (select multiple)', dynOpts.types, ui.dashTypes) +
-        renderMultiFilterGroup('mode', 'Modes (select multiple)', dynOpts.modes, ui.dashModes) +
-        renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.dashCategories) +
       '</div>' +
     '</div>' +
 
@@ -137,10 +135,10 @@ export function renderDashboard(main, ui, render, u) {
   document.getElementById('dashDateTo').addEventListener('change', function (e) { ui.dashDateTo = e.target.value; render(); });
 
   bindMultiFilterGroups(document.getElementById('dashMultiFilters'), function (group, val) {
-    if (group === 'account') ui.dashAccounts = State.toggleMultiFilter(ui.dashAccounts, val);
-    else if (group === 'type') ui.dashTypes = State.toggleMultiFilter(ui.dashTypes, val);
-    else if (group === 'mode') ui.dashModes = State.toggleMultiFilter(ui.dashModes, val);
-    else if (group === 'category') ui.dashCategories = State.toggleMultiFilter(ui.dashCategories, val);
+    if (group === 'dash_account') ui.dashAccounts = State.toggleMultiFilter(ui.dashAccounts, val);
+    else if (group === 'dash_type') ui.dashTypes = State.toggleMultiFilter(ui.dashTypes, val);
+    else if (group === 'dash_mode') ui.dashModes = State.toggleMultiFilter(ui.dashModes, val);
+    else if (group === 'dash_category') ui.dashCategories = State.toggleMultiFilter(ui.dashCategories, val);
     render();
   });
 

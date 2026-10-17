@@ -1,4 +1,4 @@
-import { escapeHtml, inr, uid, todayStr, formatDate, icon } from './utils.js';
+import { escapeHtml, inr, uid, todayStr, formatDate, icon, pad, today } from './utils.js';
 import { MODES } from './constants.js';
 import { toast, confirmModal, renderMultiFilterGroup, bindMultiFilterGroups } from './ui.js';
 import * as State from './state.js';
@@ -7,17 +7,17 @@ export function renderTransactions(main, ui, render, u) {
   var ud = State.currentUserData();
   var editingTx = ui.editingTxId ? ud.transactions.find(function (t) { return t.id === ui.editingTxId; }) : null;
 
+  var defaultStart = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-01';
+  if (ui.txDateFrom === undefined) ui.txDateFrom = defaultStart;
+  if (ui.txDateTo === undefined) ui.txDateTo = todayStr;
+
   ui.txAccounts = State.normalizeMultiFilter(ui.txAccounts);
   ui.txCategories = State.normalizeMultiFilter(ui.txCategories);
   ui.txTypes = State.normalizeMultiFilter(ui.txTypes);
   ui.txModes = State.normalizeMultiFilter(ui.txModes);
-  ui.txDateFrom = ui.txDateFrom || '';
-  ui.txDateTo = ui.txDateTo || '';
 
   var dynOpts = State.getDynamicFilterOptions(ud, MODES);
-  var hasActiveFilters = Boolean(
-    ui.txDateFrom ||
-    ui.txDateTo ||
+  var hasActiveMulti = Boolean(
     ui.txAccounts.length > 0 ||
     ui.txCategories.length > 0 ||
     ui.txTypes.length > 0 ||
@@ -83,19 +83,22 @@ export function renderTransactions(main, ui, render, u) {
       '</form>') +
     '</div>' +
 
-    '<div class="card filter-panel" id="txFilterPanel" style="margin-bottom:16px; padding:16px 20px;">' +
-      '<div class="filter-row" style="margin-bottom:14px;">' +
+    '<div class="card filter-panel" id="txFilterPanel" style="margin-bottom:16px; padding:14px 18px;">' +
+      '<div class="filter-row" id="txMultiFilters" style="margin-bottom:0;">' +
         '<div class="field"><span class="field-label">From Date</span><input type="date" id="txDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.txDateFrom) + '"></div>' +
         '<div class="field"><span class="field-label">To Date</span><input type="date" id="txDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.txDateTo) + '"></div>' +
-        (hasActiveFilters
-          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="resetTxFilters">Clear all filters</button></div>'
-          : '') +
-      '</div>' +
-      '<div class="multi-filter-stack" id="txMultiFilters">' +
-        renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.txAccounts) +
-        renderMultiFilterGroup('type', 'Types (select multiple)', dynOpts.types, ui.txTypes) +
-        renderMultiFilterGroup('mode', 'Modes (select multiple)', dynOpts.modes, ui.txModes) +
-        renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.txCategories) +
+        renderMultiFilterGroup('tx_account', 'Accounts', dynOpts.accounts, ui.txAccounts) +
+        renderMultiFilterGroup('tx_category', 'Categories', dynOpts.categories, ui.txCategories) +
+        renderMultiFilterGroup('tx_type', 'Types', dynOpts.types, ui.txTypes) +
+        renderMultiFilterGroup('tx_mode', 'Modes', dynOpts.modes, ui.txModes) +
+        '<div class="field" style="align-self:flex-end; display:flex; gap:8px; flex-direction:row; flex-wrap:wrap;">' +
+          ((ui.txDateFrom !== defaultStart || ui.txDateTo !== todayStr || hasActiveMulti)
+            ? '<button type="button" class="btn secondary sm" id="resetTxFilters">This Month</button>'
+            : '') +
+          ((ui.txDateFrom || ui.txDateTo)
+            ? '<button type="button" class="btn secondary sm" id="allTimeTxFilters">All Dates</button>'
+            : '') +
+        '</div>' +
       '</div>' +
     '</div>' +
     '<div class="card" id="txTableCard"></div>'
@@ -222,22 +225,31 @@ export function renderTransactions(main, ui, render, u) {
   document.getElementById('txDateTo').addEventListener('change', function (e) { ui.txDateTo = e.target.value; render(); });
 
   bindMultiFilterGroups(document.getElementById('txMultiFilters'), function (group, val) {
-    if (group === 'account') ui.txAccounts = State.toggleMultiFilter(ui.txAccounts, val);
-    else if (group === 'type') ui.txTypes = State.toggleMultiFilter(ui.txTypes, val);
-    else if (group === 'mode') ui.txModes = State.toggleMultiFilter(ui.txModes, val);
-    else if (group === 'category') ui.txCategories = State.toggleMultiFilter(ui.txCategories, val);
+    if (group === 'tx_account') ui.txAccounts = State.toggleMultiFilter(ui.txAccounts, val);
+    else if (group === 'tx_type') ui.txTypes = State.toggleMultiFilter(ui.txTypes, val);
+    else if (group === 'tx_mode') ui.txModes = State.toggleMultiFilter(ui.txModes, val);
+    else if (group === 'tx_category') ui.txCategories = State.toggleMultiFilter(ui.txCategories, val);
     render();
   });
 
   var resetBtn = document.getElementById('resetTxFilters');
   if (resetBtn) {
     resetBtn.addEventListener('click', function () {
-      ui.txDateFrom = '';
-      ui.txDateTo = '';
+      ui.txDateFrom = defaultStart;
+      ui.txDateTo = todayStr;
       ui.txAccounts = [];
       ui.txCategories = [];
       ui.txTypes = [];
       ui.txModes = [];
+      render();
+    });
+  }
+
+  var allTimeBtn = document.getElementById('allTimeTxFilters');
+  if (allTimeBtn) {
+    allTimeBtn.addEventListener('click', function () {
+      ui.txDateFrom = '';
+      ui.txDateTo = '';
       render();
     });
   }

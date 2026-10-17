@@ -54,43 +54,104 @@ export function confirmModal(opts) {
   });
 }
 
+var activeOpenDropdownKey = null;
+var activeDropdownScrollTop = 0;
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.multi-dd')) {
+      activeOpenDropdownKey = null;
+      activeDropdownScrollTop = 0;
+      document.querySelectorAll('.multi-dd.open').forEach(function (el) {
+        el.classList.remove('open');
+      });
+    }
+  });
+}
+
 /**
- * Renders a dynamic multi-select filter pill group.
+ * Renders a compact multi-select dropdown field (.field) that fits inline in .filter-row.
  * options: [{ value, label }]
  * selectedArr: array of selected option values ([] means "All")
  */
 export function renderMultiFilterGroup(groupKey, title, options, selectedArr) {
   var sel = Array.isArray(selectedArr) ? selectedArr : [];
   var isAll = sel.length === 0;
-  var countHtml = isAll
-    ? '<span class="multi-filter-badge">All</span>'
-    : '<span class="multi-filter-badge active">' + sel.length + ' selected</span>' +
-      '<button type="button" class="multi-filter-clear" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="__all__">Clear</button>';
+  var isOpen = activeOpenDropdownKey === groupKey;
 
-  var chipsHtml = '<button type="button" class="filter-chip ' + (isAll ? 'active' : '') + '" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="__all__">All</button>' +
+  var summaryText = 'All ' + title;
+  if (sel.length === 1) {
+    var found = options.find(function (o) { return o.value === sel[0]; });
+    summaryText = found ? found.label : sel[0];
+  } else if (sel.length > 1) {
+    summaryText = sel.length + ' selected';
+  }
+
+  var itemsHtml =
+    '<button type="button" class="multi-dd-item all-opt ' + (isAll ? 'checked' : '') + '" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="__all__">' +
+      '<span class="multi-dd-check">' + (isAll ? '✓' : '') + '</span>' +
+      '<span class="multi-dd-text">All ' + escapeHtml(title) + '</span>' +
+    '</button>' +
     options.map(function (opt) {
       var active = sel.indexOf(opt.value) >= 0;
-      return '<button type="button" class="filter-chip ' + (active ? 'active' : '') + '" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="' + escapeHtml(opt.value) + '">' +
-        (active ? '<span class="chip-check">✓</span>' : '') +
-        escapeHtml(opt.label) +
+      return '<button type="button" class="multi-dd-item ' + (active ? 'checked' : '') + '" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="' + escapeHtml(opt.value) + '">' +
+        '<span class="multi-dd-check">' + (active ? '✓' : '') + '</span>' +
+        '<span class="multi-dd-text">' + escapeHtml(opt.label) + '</span>' +
       '</button>';
     }).join('');
 
-  return '<div class="multi-filter-group" data-group="' + escapeHtml(groupKey) + '">' +
-    '<div class="multi-filter-head">' +
-      '<span class="field-label">' + escapeHtml(title) + '</span>' +
-      '<div class="multi-filter-meta">' + countHtml + '</div>' +
+  return '<div class="field multi-dd-field">' +
+    '<span class="field-label">' + escapeHtml(title) + '</span>' +
+    '<div class="multi-dd ' + (isOpen ? 'open' : '') + '" data-dd-group="' + escapeHtml(groupKey) + '">' +
+      '<button type="button" class="multi-dd-trigger ' + (!isAll ? 'has-selection' : '') + '" data-dd-toggle="' + escapeHtml(groupKey) + '">' +
+        '<span class="multi-dd-summary">' + escapeHtml(summaryText) + '</span>' +
+        '<span class="multi-dd-caret">▾</span>' +
+      '</button>' +
+      '<div class="multi-dd-menu">' +
+        itemsHtml +
+      '</div>' +
     '</div>' +
-    '<div class="multi-filter-chips">' + chipsHtml + '</div>' +
   '</div>';
 }
 
 export function bindMultiFilterGroups(container, onToggle) {
   if (!container) return;
+
+  if (activeOpenDropdownKey) {
+    var openEl = container.querySelector('.multi-dd[data-dd-group="' + activeOpenDropdownKey + '"] .multi-dd-menu');
+    if (openEl && activeDropdownScrollTop) {
+      openEl.scrollTop = activeDropdownScrollTop;
+    }
+  }
+
+  container.querySelectorAll('[data-dd-toggle]').forEach(function (trigger) {
+    trigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var group = trigger.getAttribute('data-dd-toggle');
+      var wrapper = trigger.closest('.multi-dd');
+      var wasOpen = wrapper.classList.contains('open');
+      document.querySelectorAll('.multi-dd.open').forEach(function (el) {
+        el.classList.remove('open');
+      });
+      if (wasOpen) {
+        activeOpenDropdownKey = null;
+        activeDropdownScrollTop = 0;
+      } else {
+        wrapper.classList.add('open');
+        activeOpenDropdownKey = group;
+        activeDropdownScrollTop = 0;
+      }
+    });
+  });
+
   container.querySelectorAll('[data-filter-group]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
       var group = btn.getAttribute('data-filter-group');
       var val = btn.getAttribute('data-filter-val');
+      var menu = btn.closest('.multi-dd-menu');
+      activeOpenDropdownKey = group;
+      activeDropdownScrollTop = menu ? menu.scrollTop : 0;
       onToggle(group, val);
     });
   });

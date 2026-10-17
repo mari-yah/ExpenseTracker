@@ -1,4 +1,4 @@
-import { escapeHtml, inr, uid, todayStr, monthLabel, formatDate, icon } from './utils.js';
+import { escapeHtml, inr, uid, todayStr, monthLabel, formatDate, icon, pad, today } from './utils.js';
 import { MODES } from './constants.js';
 import { toast, confirmModal, renderMultiFilterGroup, bindMultiFilterGroups } from './ui.js';
 import * as State from './state.js';
@@ -251,19 +251,18 @@ export function buildAccountLedgerRows(ud, selectedAccountIds, dateFrom, dateTo,
  */
 export function renderGeneralLedger(main, ui, render, u) {
   var ud = State.currentUserData();
+  var defaultStart = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-01';
+  if (ui.ledgerDateFrom === undefined) ui.ledgerDateFrom = defaultStart;
+  if (ui.ledgerDateTo === undefined) ui.ledgerDateTo = todayStr;
 
   ui.ledgerViewType = ui.ledgerViewType || 'category'; // 'category' | 'account'
   ui.ledgerCategories = State.normalizeMultiFilter(ui.ledgerCategories);
   ui.ledgerAccounts = State.normalizeMultiFilter(ui.ledgerAccounts);
   ui.ledgerTypes = State.normalizeMultiFilter(ui.ledgerTypes);
   ui.ledgerModes = State.normalizeMultiFilter(ui.ledgerModes);
-  ui.ledgerDateFrom = ui.ledgerDateFrom || '';
-  ui.ledgerDateTo = ui.ledgerDateTo || '';
 
   var dynOpts = State.getDynamicFilterOptions(ud, MODES);
-  var hasActiveFilters = Boolean(
-    ui.ledgerDateFrom ||
-    ui.ledgerDateTo ||
+  var hasActiveMulti = Boolean(
     ui.ledgerCategories.length > 0 ||
     ui.ledgerAccounts.length > 0 ||
     ui.ledgerTypes.length > 0 ||
@@ -335,22 +334,25 @@ export function renderGeneralLedger(main, ui, render, u) {
       '</div>' +
     '</div>' +
 
-    '<div class="card filter-panel" style="margin-bottom:20px; padding:16px 20px;">' +
-      '<div class="filter-row" style="margin-bottom:14px;">' +
+    '<div class="card filter-panel" style="margin-bottom:20px; padding:14px 18px;">' +
+      '<div class="filter-row" id="ledgerMultiFilters" style="margin-bottom:0;">' +
         '<div class="field"><span class="field-label">From Date</span><input type="date" id="ledgerDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.ledgerDateFrom) + '"></div>' +
         '<div class="field"><span class="field-label">To Date</span><input type="date" id="ledgerDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.ledgerDateTo) + '"></div>' +
-        (hasActiveFilters
-          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearLedgerFilters">Clear all filters</button></div>'
-          : '') +
-      '</div>' +
-      '<div class="multi-filter-stack" id="ledgerMultiFilters">' +
         (ui.ledgerViewType === 'category'
-          ? renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.ledgerCategories) +
-            renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.ledgerAccounts)
-          : renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.ledgerAccounts) +
-            renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.ledgerCategories)) +
-        renderMultiFilterGroup('type', 'Types (select multiple)', dynOpts.types, ui.ledgerTypes) +
-        renderMultiFilterGroup('mode', 'Modes (select multiple)', dynOpts.modes, ui.ledgerModes) +
+          ? renderMultiFilterGroup('ledger_category', 'Categories', dynOpts.categories, ui.ledgerCategories) +
+            renderMultiFilterGroup('ledger_account', 'Accounts', dynOpts.accounts, ui.ledgerAccounts)
+          : renderMultiFilterGroup('ledger_account', 'Accounts', dynOpts.accounts, ui.ledgerAccounts) +
+            renderMultiFilterGroup('ledger_category', 'Categories', dynOpts.categories, ui.ledgerCategories)) +
+        renderMultiFilterGroup('ledger_type', 'Types', dynOpts.types, ui.ledgerTypes) +
+        renderMultiFilterGroup('ledger_mode', 'Modes', dynOpts.modes, ui.ledgerModes) +
+        '<div class="field" style="align-self:flex-end; display:flex; gap:8px; flex-direction:row; flex-wrap:wrap;">' +
+          ((ui.ledgerDateFrom !== defaultStart || ui.ledgerDateTo !== todayStr || hasActiveMulti)
+            ? '<button type="button" class="btn secondary sm" id="clearLedgerFilters">This Month</button>'
+            : '') +
+          ((ui.ledgerDateFrom || ui.ledgerDateTo)
+            ? '<button type="button" class="btn secondary sm" id="allTimeLedgerFilters">All Dates</button>'
+            : '') +
+        '</div>' +
       '</div>' +
     '</div>' +
 
@@ -367,10 +369,10 @@ export function renderGeneralLedger(main, ui, render, u) {
   });
 
   bindMultiFilterGroups(document.getElementById('ledgerMultiFilters'), function (group, val) {
-    if (group === 'category') ui.ledgerCategories = State.toggleMultiFilter(ui.ledgerCategories, val);
-    else if (group === 'account') ui.ledgerAccounts = State.toggleMultiFilter(ui.ledgerAccounts, val);
-    else if (group === 'type') ui.ledgerTypes = State.toggleMultiFilter(ui.ledgerTypes, val);
-    else if (group === 'mode') ui.ledgerModes = State.toggleMultiFilter(ui.ledgerModes, val);
+    if (group === 'ledger_category') ui.ledgerCategories = State.toggleMultiFilter(ui.ledgerCategories, val);
+    else if (group === 'ledger_account') ui.ledgerAccounts = State.toggleMultiFilter(ui.ledgerAccounts, val);
+    else if (group === 'ledger_type') ui.ledgerTypes = State.toggleMultiFilter(ui.ledgerTypes, val);
+    else if (group === 'ledger_mode') ui.ledgerModes = State.toggleMultiFilter(ui.ledgerModes, val);
     render();
   });
 
@@ -380,12 +382,21 @@ export function renderGeneralLedger(main, ui, render, u) {
   var clearBtn = document.getElementById('clearLedgerFilters');
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
-      ui.ledgerDateFrom = '';
-      ui.ledgerDateTo = '';
+      ui.ledgerDateFrom = defaultStart;
+      ui.ledgerDateTo = todayStr;
       ui.ledgerCategories = [];
       ui.ledgerAccounts = [];
       ui.ledgerTypes = [];
       ui.ledgerModes = [];
+      render();
+    });
+  }
+
+  var allTimeBtn = document.getElementById('allTimeLedgerFilters');
+  if (allTimeBtn) {
+    allTimeBtn.addEventListener('click', function () {
+      ui.ledgerDateFrom = '';
+      ui.ledgerDateTo = '';
       render();
     });
   }

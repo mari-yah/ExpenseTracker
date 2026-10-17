@@ -387,21 +387,40 @@
     .cat-two-col-grid{ grid-template-columns:1fr; }
   }
 
-  /* ---- dynamic multi-select filter chips ---- */
-  .multi-filter-stack{ display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--border-soft); padding-top:14px; }
-  .multi-filter-group{ display:flex; flex-direction:column; gap:6px; }
-  .multi-filter-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .multi-filter-head .field-label{ margin-bottom:0; }
-  .multi-filter-meta{ display:flex; align-items:center; gap:8px; }
-  .multi-filter-badge{ font-size:0.72rem; font-weight:600; color:var(--ink-faint); background:var(--surface-soft); border:1px solid var(--border-soft); border-radius:999px; padding:2px 8px; }
-  .multi-filter-badge.active{ color:var(--accent); background:var(--accent-soft); border-color:var(--accent); font-weight:700; }
-  .multi-filter-clear{ background:none; border:none; padding:0; font-size:0.74rem; font-weight:600; color:var(--accent); cursor:pointer; text-decoration:underline; }
-  .multi-filter-clear:hover{ opacity:0.8; }
-  .multi-filter-chips{ display:flex; flex-wrap:wrap; gap:6px; }
-  .filter-chip{ display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:999px; border:1px solid var(--border); background:var(--surface-soft); color:var(--ink-soft); font-size:0.78rem; font-weight:600; cursor:pointer; transition:all .15s ease; line-height:1.25; }
-  .filter-chip:hover{ border-color:var(--accent); color:var(--ink); background:var(--surface); }
-  .filter-chip.active{ background:var(--accent); color:#fff; border-color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
-  .filter-chip .chip-check{ font-size:0.72rem; font-weight:800; line-height:1; }
+  /* ---- compact multi-select dropdown ---- */
+  .multi-dd-field{ min-width:140px; }
+  .multi-dd{ position:relative; width:100%; }
+  .multi-dd-trigger{
+    font-family:var(--font-body); font-size:0.9rem; border:1px solid var(--border); border-radius:9px;
+    background:var(--surface); padding:9px 11px; width:100%; color:var(--ink); transition:border-color .15s;
+    display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; text-align:left;
+  }
+  .multi-dd-trigger:hover{ border-color:var(--ink-faint); }
+  .multi-dd.open .multi-dd-trigger,
+  .multi-dd-trigger.has-selection{ border-color:var(--accent); }
+  .multi-dd-trigger.has-selection{ background:var(--accent-soft); font-weight:600; color:var(--accent); }
+  .multi-dd-summary{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .multi-dd-caret{ font-size:0.75rem; color:var(--ink-faint); flex-shrink:0; }
+  .multi-dd-menu{
+    display:none; position:absolute; top:calc(100% + 5px); left:0; min-width:210px; width:100%; max-height:260px; overflow-y:auto;
+    background:var(--surface); border:1px solid var(--border); border-radius:11px; box-shadow:0 8px 24px rgba(0,0,0,0.14);
+    z-index:50; padding:6px; flex-direction:column; gap:2px;
+  }
+  .multi-dd.open .multi-dd-menu{ display:flex; }
+  .multi-dd-item{
+    display:flex; align-items:center; gap:9px; width:100%; padding:7px 10px; border:none; border-radius:7px;
+    background:transparent; color:var(--ink); font-family:var(--font-body); font-size:0.84rem; font-weight:500;
+    cursor:pointer; text-align:left; transition:background .12s;
+  }
+  .multi-dd-item:hover{ background:var(--surface-soft); }
+  .multi-dd-item.all-opt{ border-bottom:1px solid var(--border-soft); border-radius:7px 7px 0 0; margin-bottom:3px; padding-bottom:8px; font-weight:600; }
+  .multi-dd-check{
+    width:16px; height:16px; border-radius:4px; border:1px solid var(--border); display:inline-flex;
+    align-items:center; justify-content:center; font-size:0.72rem; font-weight:800; color:transparent; background:var(--surface); flex-shrink:0;
+  }
+  .multi-dd-item.checked .multi-dd-check{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .multi-dd-item.checked{ font-weight:600; color:var(--accent); }
+  .multi-dd-text{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
 
   /* ---- dynamic filtered transactions summary bar ---- */
   .tx-summary-bar{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding-bottom:14px; margin-bottom:12px; border-bottom:1px solid var(--border); }
