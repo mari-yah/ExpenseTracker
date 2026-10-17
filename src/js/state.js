@@ -216,6 +216,94 @@ export function allMonthKeys(txs) {
   return Object.keys(set).sort().reverse();
 }
 
+export function normalizeMultiFilter(val) {
+  if (!val || val === 'all') return [];
+  if (Array.isArray(val)) return val.filter(function (v) { return v && v !== 'all'; });
+  return [val];
+}
+
+export function toggleMultiFilter(currentVal, itemVal) {
+  var arr = normalizeMultiFilter(currentVal);
+  if (!itemVal || itemVal === '__all__' || itemVal === 'all') return [];
+  var idx = arr.indexOf(itemVal);
+  if (idx >= 0) {
+    return arr.slice(0, idx).concat(arr.slice(idx + 1));
+  }
+  return arr.concat([itemVal]);
+}
+
+export function matchesMultiAccount(t, selectedAccountIds, accounts) {
+  var sel = normalizeMultiFilter(selectedAccountIds);
+  if (sel.length === 0) return true;
+  var effId = effectiveTxAccountId(t, accounts);
+  return sel.indexOf(effId) >= 0 || sel.indexOf(t.fromAccountId) >= 0 || sel.indexOf(t.toAccountId) >= 0;
+}
+
+export function matchesMultiValue(val, selectedValues) {
+  var sel = normalizeMultiFilter(selectedValues);
+  if (sel.length === 0) return true;
+  return sel.indexOf(val || '') >= 0;
+}
+
+export function getDynamicFilterOptions(ud, defaultModes) {
+  var accounts = (ud.accounts || []).map(function (a) {
+    return { value: a.id, label: a.name };
+  });
+
+  var catSeen = {};
+  var categories = [];
+  (ud.categories || []).forEach(function (c) {
+    if (c && c.name && !catSeen[c.name]) {
+      catSeen[c.name] = true;
+      categories.push({ value: c.name, label: c.name });
+    }
+  });
+  var extraCats = [];
+  (ud.transactions || []).forEach(function (t) {
+    if (t.category && !catSeen[t.category]) {
+      catSeen[t.category] = true;
+      extraCats.push(t.category);
+    }
+  });
+  extraCats.sort().forEach(function (cName) {
+    categories.push({ value: cName, label: cName });
+  });
+
+  var typeSeen = {};
+  var types = [];
+  ['Expense', 'Income', 'Transfer', 'CC Bill Payment'].forEach(function (tp) {
+    typeSeen[tp] = true;
+    types.push({ value: tp, label: tp });
+  });
+  (ud.transactions || []).forEach(function (t) {
+    if (t.type && !typeSeen[t.type]) {
+      typeSeen[t.type] = true;
+      types.push({ value: t.type, label: t.type });
+    }
+  });
+
+  var modeSeen = {};
+  var modes = [];
+  (defaultModes || ['Cash', 'UPI', 'NEFT', 'RTGS', 'Cheque', 'Debit Card', 'Credit Card', 'Net Banking', 'Other']).forEach(function (m) {
+    modeSeen[m] = true;
+    modes.push({ value: m, label: m });
+  });
+  (ud.transactions || []).forEach(function (t) {
+    if (t.mode && !modeSeen[t.mode]) {
+      modeSeen[t.mode] = true;
+      modes.push({ value: t.mode, label: t.mode });
+    }
+  });
+
+  return {
+    accounts: accounts,
+    categories: categories,
+    types: types,
+    modes: modes
+  };
+}
+
+
 /**
  * Persist a new top-level state object to the backend. Resolves true on
  * success (state applied + re-rendered), false if it could not be saved.

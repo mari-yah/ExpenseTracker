@@ -1,30 +1,28 @@
 import { escapeHtml, inr, uid, todayStr, formatDate, icon } from './utils.js';
 import { MODES } from './constants.js';
-import { toast, confirmModal } from './ui.js';
+import { toast, confirmModal, renderMultiFilterGroup, bindMultiFilterGroups } from './ui.js';
 import * as State from './state.js';
 
 export function renderTransactions(main, ui, render, u) {
   var ud = State.currentUserData();
   var editingTx = ui.editingTxId ? ud.transactions.find(function (t) { return t.id === ui.editingTxId; }) : null;
 
-  ui.txCategoryFilter = ui.txCategoryFilter || 'all';
-  ui.txTypeFilter = ui.txTypeFilter || 'all';
-  ui.txModeFilter = ui.txModeFilter || 'all';
+  ui.txAccounts = State.normalizeMultiFilter(ui.txAccounts);
+  ui.txCategories = State.normalizeMultiFilter(ui.txCategories);
+  ui.txTypes = State.normalizeMultiFilter(ui.txTypes);
+  ui.txModes = State.normalizeMultiFilter(ui.txModes);
   ui.txDateFrom = ui.txDateFrom || '';
   ui.txDateTo = ui.txDateTo || '';
 
-  var acctFilterOptions = '<option value="all">All accounts</option>' + ud.accounts.map(function (a) {
-    return '<option value="' + a.id + '" ' + (a.id === ui.txAccountFilter ? 'selected' : '') + '>' + escapeHtml(a.name) + ' (' + State.getAccountType(a) + ')</option>';
-  }).join('');
-  var catFilterOptions = '<option value="all">All categories</option>' + ud.categories.map(function (c) {
-    return '<option value="' + escapeHtml(c.name) + '" ' + (c.name === ui.txCategoryFilter ? 'selected' : '') + '>' + escapeHtml(c.name) + '</option>';
-  }).join('');
-  var typeFilterOptions = '<option value="all">All types</option>' + ['Expense', 'Income', 'Transfer', 'CC Bill Payment'].map(function (t) {
-    return '<option value="' + t + '" ' + (t === ui.txTypeFilter ? 'selected' : '') + '>' + t + '</option>';
-  }).join('');
-  var modeFilterOptions = '<option value="all">All modes</option>' + MODES.map(function (m) {
-    return '<option value="' + m + '" ' + (m === ui.txModeFilter ? 'selected' : '') + '>' + m + '</option>';
-  }).join('');
+  var dynOpts = State.getDynamicFilterOptions(ud, MODES);
+  var hasActiveFilters = Boolean(
+    ui.txDateFrom ||
+    ui.txDateTo ||
+    ui.txAccounts.length > 0 ||
+    ui.txCategories.length > 0 ||
+    ui.txTypes.length > 0 ||
+    ui.txModes.length > 0
+  );
 
   function acctOpts(selected, filterFn) {
     var list = filterFn ? ud.accounts.filter(filterFn) : ud.accounts;
@@ -85,18 +83,20 @@ export function renderTransactions(main, ui, render, u) {
       '</form>') +
     '</div>' +
 
-    '<div class="card filter-panel" style="margin-bottom:16px; padding:14px 18px;">' +
-    '<div class="filter-row" style="margin-bottom:0;">' +
-      '<div class="field"><span class="field-label">From Date</span><input type="date" id="txDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.txDateFrom) + '"></div>' +
-      '<div class="field"><span class="field-label">To Date</span><input type="date" id="txDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.txDateTo) + '"></div>' +
-      '<div class="field"><span class="field-label">Account</span><select id="txAcctFilter">' + acctFilterOptions + '</select></div>' +
-      '<div class="field"><span class="field-label">Category</span><select id="txCatFilter">' + catFilterOptions + '</select></div>' +
-      '<div class="field"><span class="field-label">Type</span><select id="txTypeFilter">' + typeFilterOptions + '</select></div>' +
-      '<div class="field"><span class="field-label">Mode</span><select id="txModeFilter">' + modeFilterOptions + '</select></div>' +
-      ((ui.txAccountFilter !== 'all' || ui.txCategoryFilter !== 'all' || ui.txTypeFilter !== 'all' || ui.txModeFilter !== 'all' || ui.txDateFrom || ui.txDateTo)
-        ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="resetTxFilters">Clear filters</button></div>'
-        : '') +
-    '</div>' +
+    '<div class="card filter-panel" id="txFilterPanel" style="margin-bottom:16px; padding:16px 20px;">' +
+      '<div class="filter-row" style="margin-bottom:14px;">' +
+        '<div class="field"><span class="field-label">From Date</span><input type="date" id="txDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.txDateFrom) + '"></div>' +
+        '<div class="field"><span class="field-label">To Date</span><input type="date" id="txDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.txDateTo) + '"></div>' +
+        (hasActiveFilters
+          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="resetTxFilters">Clear all filters</button></div>'
+          : '') +
+      '</div>' +
+      '<div class="multi-filter-stack" id="txMultiFilters">' +
+        renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.txAccounts) +
+        renderMultiFilterGroup('type', 'Types (select multiple)', dynOpts.types, ui.txTypes) +
+        renderMultiFilterGroup('mode', 'Modes (select multiple)', dynOpts.modes, ui.txModes) +
+        renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.txCategories) +
+      '</div>' +
     '</div>' +
     '<div class="card" id="txTableCard"></div>'
   );
@@ -220,20 +220,24 @@ export function renderTransactions(main, ui, render, u) {
 
   document.getElementById('txDateFrom').addEventListener('change', function (e) { ui.txDateFrom = e.target.value; render(); });
   document.getElementById('txDateTo').addEventListener('change', function (e) { ui.txDateTo = e.target.value; render(); });
-  document.getElementById('txAcctFilter').addEventListener('change', function (e) { ui.txAccountFilter = e.target.value; render(); });
-  document.getElementById('txCatFilter').addEventListener('change', function (e) { ui.txCategoryFilter = e.target.value; render(); });
-  document.getElementById('txTypeFilter').addEventListener('change', function (e) { ui.txTypeFilter = e.target.value; render(); });
-  document.getElementById('txModeFilter').addEventListener('change', function (e) { ui.txModeFilter = e.target.value; render(); });
+
+  bindMultiFilterGroups(document.getElementById('txMultiFilters'), function (group, val) {
+    if (group === 'account') ui.txAccounts = State.toggleMultiFilter(ui.txAccounts, val);
+    else if (group === 'type') ui.txTypes = State.toggleMultiFilter(ui.txTypes, val);
+    else if (group === 'mode') ui.txModes = State.toggleMultiFilter(ui.txModes, val);
+    else if (group === 'category') ui.txCategories = State.toggleMultiFilter(ui.txCategories, val);
+    render();
+  });
 
   var resetBtn = document.getElementById('resetTxFilters');
   if (resetBtn) {
     resetBtn.addEventListener('click', function () {
       ui.txDateFrom = '';
       ui.txDateTo = '';
-      ui.txAccountFilter = 'all';
-      ui.txCategoryFilter = 'all';
-      ui.txTypeFilter = 'all';
-      ui.txModeFilter = 'all';
+      ui.txAccounts = [];
+      ui.txCategories = [];
+      ui.txTypes = [];
+      ui.txModes = [];
       render();
     });
   }
@@ -340,17 +344,31 @@ function renderTxTable(u, ud, ui, render) {
   var list = ud.transactions.filter(function (t) {
     if (ui.txDateFrom && t.date < ui.txDateFrom) return false;
     if (ui.txDateTo && t.date > ui.txDateTo) return false;
-    if (ui.txAccountFilter !== 'all') {
-      var effId = State.effectiveTxAccountId(t, ud.accounts);
-      var matches = effId === ui.txAccountFilter || t.fromAccountId === ui.txAccountFilter || t.toAccountId === ui.txAccountFilter;
-      if (!matches) return false;
-    }
-    if (ui.txCategoryFilter !== 'all' && t.category !== ui.txCategoryFilter) return false;
-    if (ui.txTypeFilter !== 'all' && t.type !== ui.txTypeFilter) return false;
-    if (ui.txModeFilter !== 'all' && t.mode !== ui.txModeFilter) return false;
+    if (!State.matchesMultiAccount(t, ui.txAccounts, ud.accounts)) return false;
+    if (!State.matchesMultiValue(t.category, ui.txCategories)) return false;
+    if (!State.matchesMultiValue(t.type, ui.txTypes)) return false;
+    if (!State.matchesMultiValue(t.mode, ui.txModes)) return false;
     return true;
   }).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
 
-  card.innerHTML = renderTxListHtml(list, ud);
+  var totalIncome = 0;
+  var totalExpense = 0;
+  list.forEach(function (t) {
+    var amt = Number(t.amount || 0);
+    if (t.type === 'Income') totalIncome += amt;
+    else if (t.type === 'Expense') totalExpense += amt;
+  });
+
+  var summaryHtml = '<div class="tx-summary-bar">' +
+    '<span class="tx-sum-count">Showing <strong>' + list.length + '</strong> transaction' + (list.length === 1 ? '' : 's') + '</span>' +
+    '<div class="tx-sum-pills">' +
+      '<span class="t-tot-pill credit">Income: <strong>' + inr(totalIncome) + '</strong></span>' +
+      '<span class="t-tot-pill debit">Expense: <strong>' + inr(totalExpense) + '</strong></span>' +
+      '<span class="t-tot-pill net">Net: <strong>' + inr(totalIncome - totalExpense) + '</strong></span>' +
+    '</div>' +
+  '</div>';
+
+  card.innerHTML = summaryHtml + renderTxListHtml(list, ud);
   bindTxItemActions(card, u, ud, ui, render);
 }
+

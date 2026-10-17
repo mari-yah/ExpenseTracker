@@ -1,4 +1,6 @@
 import { escapeHtml, inr, todayStr, pad, today } from './utils.js';
+import { MODES } from './constants.js';
+import { renderMultiFilterGroup, bindMultiFilterGroups } from './ui.js';
 import * as State from './state.js';
 
 export function renderDashboard(main, ui, render, u) {
@@ -7,19 +9,27 @@ export function renderDashboard(main, ui, render, u) {
   if (ui.dashDateFrom === undefined) ui.dashDateFrom = defaultStart;
   if (ui.dashDateTo === undefined) ui.dashDateTo = todayStr;
 
-  var acctOptions = '<option value="all">All accounts</option>' + ud.accounts.map(function (a) {
-    return '<option value="' + a.id + '" ' + (a.id === ui.dashAccount ? 'selected' : '') + '>' + escapeHtml(a.name) + '</option>';
-  }).join('');
+  ui.dashAccounts = State.normalizeMultiFilter(ui.dashAccounts);
+  ui.dashCategories = State.normalizeMultiFilter(ui.dashCategories);
+  ui.dashTypes = State.normalizeMultiFilter(ui.dashTypes);
+  ui.dashModes = State.normalizeMultiFilter(ui.dashModes);
 
-  var periodTx = ud.transactions.filter(function (t) {
+  var dynOpts = State.getDynamicFilterOptions(ud, MODES);
+  var hasActiveMulti = Boolean(
+    ui.dashAccounts.length > 0 ||
+    ui.dashCategories.length > 0 ||
+    ui.dashTypes.length > 0 ||
+    ui.dashModes.length > 0
+  );
+
+  var scopedTx = ud.transactions.filter(function (t) {
     if (ui.dashDateFrom && t.date < ui.dashDateFrom) return false;
     if (ui.dashDateTo && t.date > ui.dashDateTo) return false;
+    if (!State.matchesMultiAccount(t, ui.dashAccounts, ud.accounts)) return false;
+    if (!State.matchesMultiValue(t.category, ui.dashCategories)) return false;
+    if (!State.matchesMultiValue(t.type, ui.dashTypes)) return false;
+    if (!State.matchesMultiValue(t.mode, ui.dashModes)) return false;
     return true;
-  });
-
-  var scopedTx = ui.dashAccount === 'all' ? periodTx : periodTx.filter(function (t) {
-    var effId = State.effectiveTxAccountId(t, ud.accounts);
-    return effId === ui.dashAccount || t.fromAccountId === ui.dashAccount || t.toAccountId === ui.dashAccount;
   });
 
   var income = scopedTx.filter(function (t) { return t.type === 'Income'; }).reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
@@ -33,7 +43,9 @@ export function renderDashboard(main, ui, render, u) {
   });
 
   var activeMonthKey = (ui.dashDateFrom || ui.dashDateTo || todayStr).slice(0, 7);
-  var activeCategories = State.categoriesForMonth(ud.categories, activeMonthKey);
+  var activeCategories = State.categoriesForMonth(ud.categories, activeMonthKey).filter(function (c) {
+    return State.matchesMultiValue(c.name, ui.dashCategories);
+  });
 
   var overCount = 0, warnCount = 0;
   var budgetRows = activeCategories.map(function (c) {
@@ -69,20 +81,25 @@ export function renderDashboard(main, ui, render, u) {
         '<div class="bal num ' + (bal < 0 ? 'neg' : '') + '">' + inr(bal) + '</div></div>';
     }).join('') + '</div>' +
 
-    '<div class="card filter-panel" style="margin-bottom:20px; padding:14px 18px;">' +
-    '<div class="filter-row" style="margin-bottom:0;">' +
-    '<div class="field"><span class="field-label">From Date</span><input type="date" id="dashDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateFrom) + '"></div>' +
-    '<div class="field"><span class="field-label">To Date</span><input type="date" id="dashDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateTo) + '"></div>' +
-    '<div class="field"><span class="field-label">Account</span><select id="acctSelect">' + acctOptions + '</select></div>' +
-    '<div class="field" style="align-self:flex-end; display:flex; gap:8px; flex-direction:row;">' +
-      ((ui.dashDateFrom !== defaultStart || ui.dashDateTo !== todayStr || ui.dashAccount !== 'all')
-        ? '<button type="button" class="btn secondary sm" id="resetDashPeriod">This Month</button>'
-        : '') +
-      ((ui.dashDateFrom || ui.dashDateTo)
-        ? '<button type="button" class="btn secondary sm" id="allTimeDashPeriod">All Dates</button>'
-        : '') +
-    '</div>' +
-    '</div>' +
+    '<div class="card filter-panel" style="margin-bottom:20px; padding:16px 20px;">' +
+      '<div class="filter-row" style="margin-bottom:14px;">' +
+        '<div class="field"><span class="field-label">From Date</span><input type="date" id="dashDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateFrom) + '"></div>' +
+        '<div class="field"><span class="field-label">To Date</span><input type="date" id="dashDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.dashDateTo) + '"></div>' +
+        '<div class="field" style="align-self:flex-end; display:flex; gap:8px; flex-direction:row; flex-wrap:wrap;">' +
+          ((ui.dashDateFrom !== defaultStart || ui.dashDateTo !== todayStr || hasActiveMulti)
+            ? '<button type="button" class="btn secondary sm" id="resetDashPeriod">Reset / This Month</button>'
+            : '') +
+          ((ui.dashDateFrom || ui.dashDateTo)
+            ? '<button type="button" class="btn secondary sm" id="allTimeDashPeriod">All Dates</button>'
+            : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="multi-filter-stack" id="dashMultiFilters">' +
+        renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.dashAccounts) +
+        renderMultiFilterGroup('type', 'Types (select multiple)', dynOpts.types, ui.dashTypes) +
+        renderMultiFilterGroup('mode', 'Modes (select multiple)', dynOpts.modes, ui.dashModes) +
+        renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.dashCategories) +
+      '</div>' +
     '</div>' +
 
     '<div class="alert-banner ' + bannerClass + '">' + bannerText + '</div>' +
@@ -96,7 +113,7 @@ export function renderDashboard(main, ui, render, u) {
 
     '<h2 class="section-title">Budget tracker</h2>' +
     (function() {
-      var activeBudgetRows = budgetRows.filter(function (r) { return r.spent > 0; });
+      var activeBudgetRows = budgetRows.filter(function (r) { return r.spent > 0 || ui.dashCategories.indexOf(r.name) >= 0; });
       return '<div class="card">' + (activeBudgetRows.length === 0 ? '<div class="empty-note">No expenses logged for any category in this period.</div>' :
         activeBudgetRows.map(function (r) {
           var amtSub = r.budget > 0 ? (inr(r.spent) + ' of ' + inr(r.budget)) : (inr(r.spent) + ' (No budget)');
@@ -118,14 +135,24 @@ export function renderDashboard(main, ui, render, u) {
 
   document.getElementById('dashDateFrom').addEventListener('change', function (e) { ui.dashDateFrom = e.target.value; render(); });
   document.getElementById('dashDateTo').addEventListener('change', function (e) { ui.dashDateTo = e.target.value; render(); });
-  document.getElementById('acctSelect').addEventListener('change', function (e) { ui.dashAccount = e.target.value; render(); });
+
+  bindMultiFilterGroups(document.getElementById('dashMultiFilters'), function (group, val) {
+    if (group === 'account') ui.dashAccounts = State.toggleMultiFilter(ui.dashAccounts, val);
+    else if (group === 'type') ui.dashTypes = State.toggleMultiFilter(ui.dashTypes, val);
+    else if (group === 'mode') ui.dashModes = State.toggleMultiFilter(ui.dashModes, val);
+    else if (group === 'category') ui.dashCategories = State.toggleMultiFilter(ui.dashCategories, val);
+    render();
+  });
 
   var resetBtn = document.getElementById('resetDashPeriod');
   if (resetBtn) {
     resetBtn.addEventListener('click', function () {
       ui.dashDateFrom = defaultStart;
       ui.dashDateTo = todayStr;
-      ui.dashAccount = 'all';
+      ui.dashAccounts = [];
+      ui.dashCategories = [];
+      ui.dashTypes = [];
+      ui.dashModes = [];
       render();
     });
   }
@@ -138,3 +165,4 @@ export function renderDashboard(main, ui, render, u) {
     });
   }
 }
+

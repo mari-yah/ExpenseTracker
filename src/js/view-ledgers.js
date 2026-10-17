@@ -1,5 +1,6 @@
 import { escapeHtml, inr, uid, todayStr, monthLabel, formatDate, icon } from './utils.js';
-import { toast, confirmModal } from './ui.js';
+import { MODES } from './constants.js';
+import { toast, confirmModal, renderMultiFilterGroup, bindMultiFilterGroups } from './ui.js';
 import * as State from './state.js';
 
 /**
@@ -92,11 +93,21 @@ export function bindLedgerActions(container, u, ud, ui, render) {
   });
 }
 
-export function buildCategoryLedgerRows(ud, categoryName, dateFrom, dateTo) {
+export function buildCategoryLedgerRows(ud, selectedCategories, dateFrom, dateTo, selectedAccounts, selectedTypes, selectedModes) {
+  var selCats = State.normalizeMultiFilter(selectedCategories);
+  var selAccts = State.normalizeMultiFilter(selectedAccounts);
+  var selTypes = State.normalizeMultiFilter(selectedTypes);
+  var selModes = State.normalizeMultiFilter(selectedModes);
+
   var txs = ud.transactions.filter(function (t) {
-    if (categoryName !== 'all' && t.category !== categoryName) return false;
     if (dateFrom && t.date < dateFrom) return false;
     if (dateTo && t.date > dateTo) return false;
+    if (!State.matchesMultiValue(t.category, selCats)) return false;
+    if (!State.matchesMultiAccount(t, selAccts, ud.accounts)) return false;
+    if (!State.matchesMultiValue(t.mode, selModes)) return false;
+    if (selTypes.length > 0) {
+      return State.matchesMultiValue(t.type, selTypes);
+    }
     return t.type === 'Expense' || t.type === 'Income';
   }).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
 
@@ -105,10 +116,12 @@ export function buildCategoryLedgerRows(ud, categoryName, dateFrom, dateTo) {
 
   txs.forEach(function (t) {
     var effId = State.effectiveTxAccountId(t, ud.accounts);
-    var acctName = State.accountName(ud.accounts, effId);
+    var acctName = (t.type === 'Transfer' || t.type === 'CC Bill Payment')
+      ? (State.accountName(ud.accounts, t.fromAccountId) + ' → ' + State.accountName(ud.accounts, t.toAccountId))
+      : State.accountName(ud.accounts, effId);
     var subParts = [acctName];
     if (t.mode) subParts.push(t.mode);
-    if (categoryName === 'all' && t.category) subParts.push(t.category);
+    if ((selCats.length === 0 || selCats.length > 1) && t.category) subParts.push(t.category);
 
     var item = {
       id: t.id,
@@ -125,16 +138,30 @@ export function buildCategoryLedgerRows(ud, categoryName, dateFrom, dateTo) {
   return { creditRows: creditRows, debitRows: debitRows };
 }
 
-export function buildAccountLedgerRows(ud, accountId, dateFrom, dateTo) {
-  var acc = ud.accounts.find(function (a) { return a.id === accountId; });
-  if (!acc) return { creditRows: [], debitRows: [], acc: null };
-  var accType = State.getAccountType(acc);
+export function buildAccountLedgerRows(ud, selectedAccountIds, dateFrom, dateTo, selectedCategories, selectedTypes, selectedModes) {
+  var selAccts = State.normalizeMultiFilter(selectedAccountIds);
+  var selCats = State.normalizeMultiFilter(selectedCategories);
+  var selTypes = State.normalizeMultiFilter(selectedTypes);
+  var selModes = State.normalizeMultiFilter(selectedModes);
+
+  var targetAccounts = selAccts.length === 0
+    ? ud.accounts
+    : ud.accounts.filter(function (a) { return selAccts.indexOf(a.id) >= 0; });
+
+  if (targetAccounts.length === 0) return { creditRows: [], debitRows: [], acc: null, accounts: [] };
+
+  var targetIdMap = {};
+  targetAccounts.forEach(function (a) { targetIdMap[a.id] = a; });
+  var showAcctBadge = targetAccounts.length > 1;
 
   var txs = ud.transactions.filter(function (t) {
     if (dateFrom && t.date < dateFrom) return false;
     if (dateTo && t.date > dateTo) return false;
+    if (!State.matchesMultiValue(t.category, selCats)) return false;
+    if (!State.matchesMultiValue(t.type, selTypes)) return false;
+    if (!State.matchesMultiValue(t.mode, selModes)) return false;
     var effId = State.effectiveTxAccountId(t, ud.accounts);
-    return effId === accountId || t.fromAccountId === accountId || t.toAccountId === accountId;
+    return Boolean(targetIdMap[effId] || targetIdMap[t.fromAccountId] || targetIdMap[t.toAccountId]);
   }).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
 
   var creditRows = [];
@@ -144,97 +171,117 @@ export function buildAccountLedgerRows(ud, accountId, dateFrom, dateTo) {
     var effId = State.effectiveTxAccountId(t, ud.accounts);
     var amt = Number(t.amount || 0);
 
-    if (accType === 'Credit Card') {
-      // For Credit Card: Left (Credit) = Bill Payments reducing due; Right (Debit) = CC Spends / Charges
-      if ((t.type === 'CC Bill Payment' || t.type === 'Transfer') && t.toAccountId === accountId) {
-        creditRows.push({
-          id: t.id,
-          date: t.date,
-          desc: t.desc || 'CC Bill Payment',
-          fallbackDesc: 'CC Bill Payment',
-          sub: 'Paid from ' + State.accountName(ud.accounts, t.fromAccountId) + (t.mode ? ' • ' + t.mode : ''),
-          amount: amt
-        });
-      } else if (t.type === 'Expense' && effId === accountId) {
-        debitRows.push({
-          id: t.id,
-          date: t.date,
-          desc: t.desc || (t.category || 'CC Expense'),
-          fallbackDesc: 'CC Expense',
-          sub: (t.category ? t.category + ' • ' : '') + (t.mode || 'Credit Card'),
-          amount: amt
-        });
+    targetAccounts.forEach(function (acc) {
+      var accountId = acc.id;
+      var accType = State.getAccountType(acc);
+      var prefix = showAcctBadge ? (acc.name + ' • ') : '';
+
+      if (accType === 'Credit Card') {
+        if ((t.type === 'CC Bill Payment' || t.type === 'Transfer') && t.toAccountId === accountId) {
+          creditRows.push({
+            id: t.id,
+            date: t.date,
+            desc: t.desc || 'CC Bill Payment',
+            fallbackDesc: 'CC Bill Payment',
+            sub: prefix + 'Paid from ' + State.accountName(ud.accounts, t.fromAccountId) + (t.mode ? ' • ' + t.mode : ''),
+            amount: amt
+          });
+        } else if (t.type === 'Expense' && effId === accountId) {
+          debitRows.push({
+            id: t.id,
+            date: t.date,
+            desc: t.desc || (t.category || 'CC Expense'),
+            fallbackDesc: 'CC Expense',
+            sub: prefix + (t.category ? t.category + ' • ' : '') + (t.mode || 'Credit Card'),
+            amount: amt
+          });
+        }
+      } else {
+        if (t.type === 'Income' && effId === accountId) {
+          creditRows.push({
+            id: t.id,
+            date: t.date,
+            desc: t.desc || 'Income',
+            fallbackDesc: 'Income',
+            sub: prefix + (t.category ? t.category + ' • ' : '') + (t.mode || ''),
+            amount: amt
+          });
+        } else if ((t.type === 'Transfer' || t.type === 'CC Bill Payment') && t.toAccountId === accountId) {
+          creditRows.push({
+            id: t.id,
+            date: t.date,
+            desc: t.desc || 'Transfer In',
+            fallbackDesc: 'Transfer In',
+            sub: prefix + 'From ' + State.accountName(ud.accounts, t.fromAccountId) + (t.mode ? ' • ' + t.mode : ''),
+            amount: amt
+          });
+        } else if (t.type === 'Expense' && effId === accountId) {
+          debitRows.push({
+            id: t.id,
+            date: t.date,
+            desc: t.desc || (t.category || 'Expense'),
+            fallbackDesc: 'Expense',
+            sub: prefix + (t.category ? t.category + ' • ' : '') + (t.mode || ''),
+            amount: amt
+          });
+        } else if ((t.type === 'Transfer' || t.type === 'CC Bill Payment') && t.fromAccountId === accountId) {
+          debitRows.push({
+            id: t.id,
+            date: t.date,
+            desc: t.desc || t.type,
+            fallbackDesc: t.type,
+            sub: prefix + 'To ' + State.accountName(ud.accounts, t.toAccountId) + (t.mode ? ' • ' + t.mode : ''),
+            amount: amt
+          });
+        }
       }
-    } else {
-      // For Bank or Cash Account: Left (Credit) = Money In (Income / Transfer In); Right (Debit) = Money Out (Expense / Transfer Out / CC Bill Payment)
-      if (t.type === 'Income' && effId === accountId) {
-        creditRows.push({
-          id: t.id,
-          date: t.date,
-          desc: t.desc || 'Income',
-          fallbackDesc: 'Income',
-          sub: (t.category ? t.category + ' • ' : '') + (t.mode || ''),
-          amount: amt
-        });
-      } else if ((t.type === 'Transfer' || t.type === 'CC Bill Payment') && t.toAccountId === accountId) {
-        creditRows.push({
-          id: t.id,
-          date: t.date,
-          desc: t.desc || 'Transfer In',
-          fallbackDesc: 'Transfer In',
-          sub: 'From ' + State.accountName(ud.accounts, t.fromAccountId) + (t.mode ? ' • ' + t.mode : ''),
-          amount: amt
-        });
-      } else if (t.type === 'Expense' && effId === accountId) {
-        debitRows.push({
-          id: t.id,
-          date: t.date,
-          desc: t.desc || (t.category || 'Expense'),
-          fallbackDesc: 'Expense',
-          sub: (t.category ? t.category + ' • ' : '') + (t.mode || ''),
-          amount: amt
-        });
-      } else if ((t.type === 'Transfer' || t.type === 'CC Bill Payment') && t.fromAccountId === accountId) {
-        debitRows.push({
-          id: t.id,
-          date: t.date,
-          desc: t.desc || t.type,
-          fallbackDesc: t.type,
-          sub: 'To ' + State.accountName(ud.accounts, t.toAccountId) + (t.mode ? ' • ' + t.mode : ''),
-          amount: amt
-        });
-      }
-    }
+    });
   });
 
-  return { creditRows: creditRows, debitRows: debitRows, acc: acc };
+  return {
+    creditRows: creditRows,
+    debitRows: debitRows,
+    acc: targetAccounts.length === 1 ? targetAccounts[0] : null,
+    accounts: targetAccounts
+  };
 }
 
 /**
- * Dedicated "Ledgers" View (Category Ledger & Account Ledger with Period Selector + Credit Left / Debit Right)
+ * Dedicated "Ledgers" View (Category Ledger & Account Ledger with Dynamic Multi-Select Filters + Credit Left / Debit Right)
  */
 export function renderGeneralLedger(main, ui, render, u) {
   var ud = State.currentUserData();
 
   ui.ledgerViewType = ui.ledgerViewType || 'category'; // 'category' | 'account'
-  ui.ledgerCategory = ui.ledgerCategory || (ud.categories[0] ? ud.categories[0].name : 'all');
-  ui.ledgerAccountId = ui.ledgerAccountId || (ud.accounts[0] ? ud.accounts[0].id : '');
+  ui.ledgerCategories = State.normalizeMultiFilter(ui.ledgerCategories);
+  ui.ledgerAccounts = State.normalizeMultiFilter(ui.ledgerAccounts);
+  ui.ledgerTypes = State.normalizeMultiFilter(ui.ledgerTypes);
+  ui.ledgerModes = State.normalizeMultiFilter(ui.ledgerModes);
   ui.ledgerDateFrom = ui.ledgerDateFrom || '';
   ui.ledgerDateTo = ui.ledgerDateTo || '';
 
-  var catOpts = '<option value="all" ' + (ui.ledgerCategory === 'all' ? 'selected' : '') + '>All Categories</option>' +
-    ud.categories.map(function (c) {
-      return '<option value="' + escapeHtml(c.name) + '" ' + (c.name === ui.ledgerCategory ? 'selected' : '') + '>' + escapeHtml(c.name) + '</option>';
-    }).join('');
-
-  var acctOpts = ud.accounts.map(function (a) {
-    return '<option value="' + a.id + '" ' + (a.id === ui.ledgerAccountId ? 'selected' : '') + '>' + escapeHtml(a.name) + ' (' + State.getAccountType(a) + ')</option>';
-  }).join('');
+  var dynOpts = State.getDynamicFilterOptions(ud, MODES);
+  var hasActiveFilters = Boolean(
+    ui.ledgerDateFrom ||
+    ui.ledgerDateTo ||
+    ui.ledgerCategories.length > 0 ||
+    ui.ledgerAccounts.length > 0 ||
+    ui.ledgerTypes.length > 0 ||
+    ui.ledgerModes.length > 0
+  );
 
   var ledgerContentHtml = '';
   if (ui.ledgerViewType === 'category') {
-    var catRes = buildCategoryLedgerRows(ud, ui.ledgerCategory, ui.ledgerDateFrom, ui.ledgerDateTo);
-    var catTitle = (ui.ledgerCategory === 'all' ? 'All Categories' : ui.ledgerCategory) + ' — Category Ledger';
+    var catRes = buildCategoryLedgerRows(
+      ud,
+      ui.ledgerCategories,
+      ui.ledgerDateFrom,
+      ui.ledgerDateTo,
+      ui.ledgerAccounts,
+      ui.ledgerTypes,
+      ui.ledgerModes
+    );
+    var catTitle = (ui.ledgerCategories.length === 0 ? 'All Categories' : ui.ledgerCategories.join(', ')) + ' — Category Ledger';
     ledgerContentHtml = renderTAccountHtml(
       catTitle,
       'CREDIT (CR) — INCOMES / REFUNDS',
@@ -243,22 +290,36 @@ export function renderGeneralLedger(main, ui, render, u) {
       catRes.debitRows
     );
   } else {
-    var accRes = buildAccountLedgerRows(ud, ui.ledgerAccountId, ui.ledgerDateFrom, ui.ledgerDateTo);
-    var acc = accRes.acc;
-    var accType = acc ? State.getAccountType(acc) : 'Bank';
-    var bal = acc ? State.accountBalance(acc, ud.transactions, ud.accounts) : 0;
-    var summaryCards = acc ? (
+    var accRes = buildAccountLedgerRows(
+      ud,
+      ui.ledgerAccounts,
+      ui.ledgerDateFrom,
+      ui.ledgerDateTo,
+      ui.ledgerCategories,
+      ui.ledgerTypes,
+      ui.ledgerModes
+    );
+    var targetAccs = accRes.accounts || [];
+    var singleAcc = accRes.acc;
+    var accType = singleAcc ? State.getAccountType(singleAcc) : 'Bank';
+    var totalOpening = targetAccs.reduce(function (s, a) { return s + Number(a.opening || 0); }, 0);
+    var totalBal = targetAccs.reduce(function (s, a) { return s + State.accountBalance(a, ud.transactions, ud.accounts); }, 0);
+    var acctTitleLabel = targetAccs.length === ud.accounts.length
+      ? 'All Accounts'
+      : targetAccs.map(function (a) { return a.name; }).join(', ');
+
+    var summaryCards = targetAccs.length > 0 ? (
       '<div class="stat-row" style="margin-bottom:18px;">' +
-        '<div class="stat-card"><div class="lbl">' + (accType === 'Credit Card' ? 'Opening CC Due' : 'Opening Balance') + '</div><div class="val num">' + inr(acc.opening) + '</div></div>' +
-        '<div class="stat-card income"><div class="lbl">' + (accType === 'Credit Card' ? 'Period Bills Paid (Cr)' : 'Period Credits / In (Cr)') + '</div><div class="val num">' + inr(accRes.creditRows.reduce(function (s, r) { return s + r.amount; }, 0)) + '</div></div>' +
-        '<div class="stat-card expense"><div class="lbl">' + (accType === 'Credit Card' ? 'Period CC Spends (Dr)' : 'Period Debits / Out (Dr)') + '</div><div class="val num">' + inr(accRes.debitRows.reduce(function (s, r) { return s + r.amount; }, 0)) + '</div></div>' +
-        '<div class="stat-card"><div class="lbl">' + (accType === 'Credit Card' ? 'Current Unpaid CC Due' : 'Current Account Balance') + '</div><div class="val num">' + inr(bal) + '</div></div>' +
+        '<div class="stat-card"><div class="lbl">' + (singleAcc && accType === 'Credit Card' ? 'Opening CC Due' : 'Opening Balance') + '</div><div class="val num">' + inr(totalOpening) + '</div></div>' +
+        '<div class="stat-card income"><div class="lbl">' + (singleAcc && accType === 'Credit Card' ? 'Period Bills Paid (Cr)' : 'Period Credits / In (Cr)') + '</div><div class="val num">' + inr(accRes.creditRows.reduce(function (s, r) { return s + r.amount; }, 0)) + '</div></div>' +
+        '<div class="stat-card expense"><div class="lbl">' + (singleAcc && accType === 'Credit Card' ? 'Period CC Spends (Dr)' : 'Period Debits / Out (Dr)') + '</div><div class="val num">' + inr(accRes.debitRows.reduce(function (s, r) { return s + r.amount; }, 0)) + '</div></div>' +
+        '<div class="stat-card"><div class="lbl">' + (singleAcc && accType === 'Credit Card' ? 'Current Unpaid CC Due' : 'Current Balance') + '</div><div class="val num">' + inr(totalBal) + '</div></div>' +
       '</div>'
     ) : '';
     ledgerContentHtml = renderTAccountHtml(
-      (acc ? acc.name : 'Account') + ' — Account Ledger',
-      accType === 'Credit Card' ? 'CREDIT (CR) — CC BILL PAYMENTS' : 'CREDIT (CR) — DEPOSITS / INFLOWS',
-      accType === 'Credit Card' ? 'DEBIT (DR) — CC SPENDS / CHARGES' : 'DEBIT (DR) — PAYMENTS / WITHDRAWALS',
+      (acctTitleLabel || 'Account') + ' — Account Ledger',
+      singleAcc && accType === 'Credit Card' ? 'CREDIT (CR) — CC BILL PAYMENTS' : 'CREDIT (CR) — DEPOSITS / INFLOWS',
+      singleAcc && accType === 'Credit Card' ? 'DEBIT (DR) — CC SPENDS / CHARGES' : 'DEBIT (DR) — PAYMENTS / WITHDRAWALS',
       accRes.creditRows,
       accRes.debitRows,
       summaryCards
@@ -267,7 +328,7 @@ export function renderGeneralLedger(main, ui, render, u) {
 
   main.insertAdjacentHTML('beforeend',
     '<div class="page-head">' +
-      '<div><h1>Ledgers</h1><div class="sub">Classic T-Account ledger view — Credit on the left, Debit on the right, with custom date filters.</div></div>' +
+      '<div><h1>Ledgers</h1><div class="sub">Classic T-Account ledger view — select multiple Categories, Accounts, Types, and Modes dynamically.</div></div>' +
       '<div class="ledger-mode-switch">' +
         '<button type="button" class="btn ' + (ui.ledgerViewType === 'category' ? '' : 'secondary') + '" id="switchCatLedger">Category Ledger</button>' +
         '<button type="button" class="btn ' + (ui.ledgerViewType === 'account' ? '' : 'secondary') + '" id="switchAcctLedger">Account Ledger</button>' +
@@ -275,15 +336,21 @@ export function renderGeneralLedger(main, ui, render, u) {
     '</div>' +
 
     '<div class="card filter-panel" style="margin-bottom:20px; padding:16px 20px;">' +
-      '<div class="filter-row" style="margin-bottom:0;">' +
-        (ui.ledgerViewType === 'category'
-          ? '<div class="field"><span class="field-label">Select Category</span><select id="ledgerCatSelect">' + catOpts + '</select></div>'
-          : '<div class="field"><span class="field-label">Select Account</span><select id="ledgerAcctSelect">' + acctOpts + '</select></div>') +
+      '<div class="filter-row" style="margin-bottom:14px;">' +
         '<div class="field"><span class="field-label">From Date</span><input type="date" id="ledgerDateFrom" max="' + todayStr + '" value="' + escapeHtml(ui.ledgerDateFrom) + '"></div>' +
         '<div class="field"><span class="field-label">To Date</span><input type="date" id="ledgerDateTo" max="' + todayStr + '" value="' + escapeHtml(ui.ledgerDateTo) + '"></div>' +
-        ((ui.ledgerDateFrom || ui.ledgerDateTo)
-          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearLedgerDates">Reset Dates</button></div>'
+        (hasActiveFilters
+          ? '<div class="field" style="align-self:flex-end;"><button type="button" class="btn secondary sm" id="clearLedgerFilters">Clear all filters</button></div>'
           : '') +
+      '</div>' +
+      '<div class="multi-filter-stack" id="ledgerMultiFilters">' +
+        (ui.ledgerViewType === 'category'
+          ? renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.ledgerCategories) +
+            renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.ledgerAccounts)
+          : renderMultiFilterGroup('account', 'Accounts (select multiple)', dynOpts.accounts, ui.ledgerAccounts) +
+            renderMultiFilterGroup('category', 'Categories (select multiple)', dynOpts.categories, ui.ledgerCategories)) +
+        renderMultiFilterGroup('type', 'Types (select multiple)', dynOpts.types, ui.ledgerTypes) +
+        renderMultiFilterGroup('mode', 'Modes (select multiple)', dynOpts.modes, ui.ledgerModes) +
       '</div>' +
     '</div>' +
 
@@ -299,20 +366,26 @@ export function renderGeneralLedger(main, ui, render, u) {
     render();
   });
 
-  var catSel = document.getElementById('ledgerCatSelect');
-  if (catSel) catSel.addEventListener('change', function (e) { ui.ledgerCategory = e.target.value; render(); });
-
-  var acctSel = document.getElementById('ledgerAcctSelect');
-  if (acctSel) acctSel.addEventListener('change', function (e) { ui.ledgerAccountId = e.target.value; render(); });
+  bindMultiFilterGroups(document.getElementById('ledgerMultiFilters'), function (group, val) {
+    if (group === 'category') ui.ledgerCategories = State.toggleMultiFilter(ui.ledgerCategories, val);
+    else if (group === 'account') ui.ledgerAccounts = State.toggleMultiFilter(ui.ledgerAccounts, val);
+    else if (group === 'type') ui.ledgerTypes = State.toggleMultiFilter(ui.ledgerTypes, val);
+    else if (group === 'mode') ui.ledgerModes = State.toggleMultiFilter(ui.ledgerModes, val);
+    render();
+  });
 
   document.getElementById('ledgerDateFrom').addEventListener('change', function (e) { ui.ledgerDateFrom = e.target.value; render(); });
   document.getElementById('ledgerDateTo').addEventListener('change', function (e) { ui.ledgerDateTo = e.target.value; render(); });
 
-  var clearBtn = document.getElementById('clearLedgerDates');
+  var clearBtn = document.getElementById('clearLedgerFilters');
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
       ui.ledgerDateFrom = '';
       ui.ledgerDateTo = '';
+      ui.ledgerCategories = [];
+      ui.ledgerAccounts = [];
+      ui.ledgerTypes = [];
+      ui.ledgerModes = [];
       render();
     });
   }

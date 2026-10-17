@@ -53,3 +53,46 @@ export function confirmModal(opts) {
     opts.onConfirm();
   });
 }
+
+/**
+ * Renders a dynamic multi-select filter pill group.
+ * options: [{ value, label }]
+ * selectedArr: array of selected option values ([] means "All")
+ */
+export function renderMultiFilterGroup(groupKey, title, options, selectedArr) {
+  var sel = Array.isArray(selectedArr) ? selectedArr : [];
+  var isAll = sel.length === 0;
+  var countHtml = isAll
+    ? '<span class="multi-filter-badge">All</span>'
+    : '<span class="multi-filter-badge active">' + sel.length + ' selected</span>' +
+      '<button type="button" class="multi-filter-clear" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="__all__">Clear</button>';
+
+  var chipsHtml = '<button type="button" class="filter-chip ' + (isAll ? 'active' : '') + '" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="__all__">All</button>' +
+    options.map(function (opt) {
+      var active = sel.indexOf(opt.value) >= 0;
+      return '<button type="button" class="filter-chip ' + (active ? 'active' : '') + '" data-filter-group="' + escapeHtml(groupKey) + '" data-filter-val="' + escapeHtml(opt.value) + '">' +
+        (active ? '<span class="chip-check">✓</span>' : '') +
+        escapeHtml(opt.label) +
+      '</button>';
+    }).join('');
+
+  return '<div class="multi-filter-group" data-group="' + escapeHtml(groupKey) + '">' +
+    '<div class="multi-filter-head">' +
+      '<span class="field-label">' + escapeHtml(title) + '</span>' +
+      '<div class="multi-filter-meta">' + countHtml + '</div>' +
+    '</div>' +
+    '<div class="multi-filter-chips">' + chipsHtml + '</div>' +
+  '</div>';
+}
+
+export function bindMultiFilterGroups(container, onToggle) {
+  if (!container) return;
+  container.querySelectorAll('[data-filter-group]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var group = btn.getAttribute('data-filter-group');
+      var val = btn.getAttribute('data-filter-val');
+      onToggle(group, val);
+    });
+  });
+}
+
